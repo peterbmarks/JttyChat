@@ -29,3 +29,8 @@ struct RigConnectionResult
 // it at the rig backend's default). Blocks for as long as Hamlib takes to
 // open the port and respond (or time out) - call this off the UI thread.
 RigConnectionResult connectAndQueryRig(int model, const QString &port, const QString &baudRate);
+
+// Opens the rig just long enough to key or unkey PTT, then closes it again.
+// Meant to run off the UI thread (serial open can block briefly). Returns an
+// error message, or an empty string on success.
+QString setRigPtt(int model, const QString &port, const QString &baudRate, bool on);

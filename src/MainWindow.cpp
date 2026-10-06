@@ -1,22 +1,71 @@
 #include "MainWindow.h"
+#include "AppSettingsKeys.h"
 #include "ChatBubble.h"
+#include "HamlibRigs.h"
+#include "JttyCodec.h"
+#include "JttyDecoder.h"
 #include "SettingsDialog.h"
 
 #include <QAction>
 #include <QApplication>
+#include <QAudioDevice>
+#include <QAudioFormat>
+#include <QAudioSink>
+#include <QAudioSource>
+#include <QBuffer>
+#include <QHBoxLayout>
 #include <QKeyEvent>
 #include <QLineEdit>
+#include <QMediaDevices>
 #include <QMenu>
 #include <QMenuBar>
+#include <QMessageBox>
 #include <QPushButton>
 #include <QScrollArea>
 #include <QScrollBar>
+#include <QSettings>
 #include <QTimer>
 #include <QVBoxLayout>
-#include <QHBoxLayout>
+
+#include <cstring>
+#include <thread>
 
 namespace {
 constexpr int kMaxBubbleWidthFraction = 70; // percent of viewport width
+constexpr int kPttLeadMs = 150; // brief key-up lead before audio starts, for real radios
+constexpr int kTxTailMs = 200;  // margin after audio ends before unkeying/re-enabling Send
+
+QAudioDevice findAudioDevice(const QList<QAudioDevice> &devices, const QByteArray &id,
+                              const QAudioDevice &fallback)
+{
+    for (const QAudioDevice &device : devices) {
+        if (device.id() == id)
+            return device;
+    }
+    return fallback;
+}
+
+struct RigTxSettings
+{
+    bool configured = false;
+    int model = 0;
+    QString port;
+    QString baudRate;
+};
+
+RigTxSettings loadRigTxSettings()
+{
+    QSettings settings;
+    settings.beginGroup(SettingsKeys::transceiverGroup);
+    RigTxSettings rig;
+    const bool haveModel = settings.contains(SettingsKeys::rigModel);
+    rig.model = settings.value(SettingsKeys::rigModel).toInt();
+    rig.port = settings.value(SettingsKeys::rigPort).toString().trimmed();
+    rig.baudRate = settings.value(SettingsKeys::rigBaudRate).toString();
+    settings.endGroup();
+    rig.configured = haveModel && !rig.port.isEmpty();
+    return rig;
+}
 }
 
 MainWindow::MainWindow(QWidget *parent)
@@ -58,6 +107,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     m_inputField = new QLineEdit(inputBar);
     m_inputField->setPlaceholderText(QStringLiteral("Text Message"));
+    m_inputField->setMaxLength(Jtty::maxMessageLength);
     m_inputField->setStyleSheet(QStringLiteral(
         "QLineEdit {"
         "  border: 1px solid #c8c8c8;"
@@ -97,6 +147,15 @@ MainWindow::MainWindow(QWidget *parent)
     connect(m_inputField, &QLineEdit::returnPressed, this, &MainWindow::sendMessage);
 
     m_inputField->setFocus();
+
+    m_jttyDecoder = new JttyDecoder(this);
+    connect(m_jttyDecoder, &JttyDecoder::messageDecoded, this, &MainWindow::onJttyMessageDecoded);
+    startJttyReceiver();
+}
+
+MainWindow::~MainWindow()
+{
+    stopJttyReceiver();
 }
 
 void MainWindow::createMenuBar()
@@ -119,7 +178,11 @@ void MainWindow::createMenuBar()
 void MainWindow::openSettingsDialog()
 {
     SettingsDialog dialog(this);
-    dialog.exec();
+    if (dialog.exec() == QDialog::Accepted) {
+        // Audio device choices may have changed; restart capture against
+        // whatever is now configured.
+        startJttyReceiver();
+    }
 }
 
 void MainWindow::sendMessage()
@@ -128,18 +191,130 @@ void MainWindow::sendMessage()
     if (text.isEmpty())
         return;
 
-    addMessage(text, true);
+    const Jtty::EncodedMessage encoded = Jtty::encodeMessage(text, Jtty::defaultToneHz);
+    if (!encoded.ok) {
+        QMessageBox::warning(this, tr("JTTY"),
+            tr("This message couldn't be encoded for JTTY (it may need more than "
+               "16 frames' worth of compact atoms to send)."));
+        return;
+    }
+
+    addMessage(encoded.canonicalText, true);
     m_inputField->clear();
 
-    // Stand-in for a real backend: echo the message back shortly after,
-    // rendered as an incoming bubble, so received-message styling is visible
-    // without needing a network layer wired up yet.
-    QTimer::singleShot(600, this, [this, text]() { simulateIncomingReply(text); });
+    transmitJtty(encoded.samples);
 }
 
-void MainWindow::simulateIncomingReply(const QString &originalText)
+void MainWindow::onJttyMessageDecoded(QString text, float frequencyHz)
 {
-    addMessage(QStringLiteral("You said: \"%1\"").arg(originalText), false);
+    Q_UNUSED(frequencyHz);
+    addMessage(text, false);
+}
+
+void MainWindow::transmitJtty(const QVector<int16_t> &samples)
+{
+    if (samples.isEmpty())
+        return;
+
+    m_inputField->setEnabled(false);
+    m_sendButton->setEnabled(false);
+
+    const RigTxSettings rig = loadRigTxSettings();
+    if (rig.configured) {
+        std::thread([rig]() { setRigPtt(rig.model, rig.port, rig.baudRate, true); }).detach();
+    }
+
+    const int leadMs = rig.configured ? kPttLeadMs : 0;
+    QTimer::singleShot(leadMs, this, [this, samples]() {
+        QSettings settings;
+        settings.beginGroup(SettingsKeys::transceiverGroup);
+        const QByteArray savedOutputId = settings.value(SettingsKeys::audioOutputDeviceId).toByteArray();
+        settings.endGroup();
+
+        const QAudioDevice device = findAudioDevice(
+            QMediaDevices::audioOutputs(), savedOutputId, QMediaDevices::defaultAudioOutput());
+        if (device.isNull())
+            return;
+
+        QAudioFormat format;
+        format.setSampleRate(Jtty::txSampleRate);
+        format.setChannelCount(1);
+        format.setSampleFormat(QAudioFormat::Int16);
+
+        delete m_audioSink;
+        delete m_txBuffer;
+
+        QByteArray bytes(reinterpret_cast<const char *>(samples.constData()),
+                          samples.size() * int(sizeof(int16_t)));
+        m_txBuffer = new QBuffer(this);
+        m_txBuffer->setData(bytes);
+        m_txBuffer->open(QIODevice::ReadOnly);
+
+        m_audioSink = new QAudioSink(device, format, this);
+        m_audioSink->start(m_txBuffer);
+    });
+
+    const qint64 durationMs = qint64(samples.size()) * 1000 / Jtty::txSampleRate;
+    const int totalMs = int(leadMs + durationMs + kTxTailMs);
+
+    QTimer::singleShot(totalMs, this, [this, rig]() {
+        if (rig.configured) {
+            std::thread([rig]() { setRigPtt(rig.model, rig.port, rig.baudRate, false); }).detach();
+        }
+        m_inputField->setEnabled(true);
+        m_sendButton->setEnabled(true);
+        m_inputField->setFocus();
+    });
+}
+
+void MainWindow::startJttyReceiver()
+{
+    stopJttyReceiver();
+
+    QSettings settings;
+    settings.beginGroup(SettingsKeys::transceiverGroup);
+    const QByteArray savedInputId = settings.value(SettingsKeys::audioInputDeviceId).toByteArray();
+    settings.endGroup();
+
+    const QAudioDevice device = findAudioDevice(
+        QMediaDevices::audioInputs(), savedInputId, QMediaDevices::defaultAudioInput());
+    if (device.isNull())
+        return;
+
+    QAudioFormat format;
+    format.setSampleRate(Jtty::rxSampleRate);
+    format.setChannelCount(1);
+    format.setSampleFormat(QAudioFormat::Int16);
+
+    m_audioSource = new QAudioSource(device, format, this);
+    m_audioSourceDevice = m_audioSource->start();
+    if (!m_audioSourceDevice) {
+        delete m_audioSource;
+        m_audioSource = nullptr;
+        return;
+    }
+
+    connect(m_audioSourceDevice, &QIODevice::readyRead, this, [this]() {
+        const QByteArray chunk = m_audioSourceDevice->readAll();
+        const int sampleCount = chunk.size() / int(sizeof(int16_t));
+        if (sampleCount <= 0)
+            return;
+
+        QVector<int16_t> samples(sampleCount);
+        std::memcpy(samples.data(), chunk.constData(), sampleCount * sizeof(int16_t));
+        m_jttyDecoder->addSamples(samples);
+        m_jttyDecoder->poll();
+    });
+}
+
+void MainWindow::stopJttyReceiver()
+{
+    if (m_audioSource) {
+        m_audioSource->stop();
+        delete m_audioSource;
+        m_audioSource = nullptr;
+        m_audioSourceDevice = nullptr;
+    }
 }
 
 void MainWindow::addMessage(const QString &text, bool isSent)

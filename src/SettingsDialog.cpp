@@ -1,4 +1,5 @@
 #include "SettingsDialog.h"
+#include "AppSettingsKeys.h"
 #include "HamlibRigs.h"
 
 #include <QAudioDevice>
@@ -19,13 +20,6 @@
 #include <thread>
 
 namespace {
-constexpr auto kCallsignKey = "callsign";
-constexpr auto kTransceiverGroup = "Transceiver";
-constexpr auto kAudioInputKey = "audioInputDeviceId";
-constexpr auto kAudioOutputKey = "audioOutputDeviceId";
-constexpr auto kRigModelKey = "rigModel";
-constexpr auto kRigPortKey = "rigPort";
-constexpr auto kRigBaudRateKey = "rigBaudRate";
 constexpr auto kDefaultBaudRate = "Default";
 
 // Selects the combo box entry whose stored device id matches savedId,
@@ -152,15 +146,15 @@ void SettingsDialog::loadSettings()
 {
     QSettings settings;
 
-    m_callsignEdit->setText(settings.value(kCallsignKey).toString());
+    m_callsignEdit->setText(settings.value(SettingsKeys::callsign).toString());
 
-    settings.beginGroup(kTransceiverGroup);
-    const QByteArray savedInputId = settings.value(kAudioInputKey).toByteArray();
-    const QByteArray savedOutputId = settings.value(kAudioOutputKey).toByteArray();
-    const bool haveSavedRigModel = settings.contains(kRigModelKey);
-    const int savedRigModel = settings.value(kRigModelKey).toInt();
-    const QString savedRigPort = settings.value(kRigPortKey).toString();
-    const QString savedBaudRate = settings.value(kRigBaudRateKey).toString();
+    settings.beginGroup(SettingsKeys::transceiverGroup);
+    const QByteArray savedInputId = settings.value(SettingsKeys::audioInputDeviceId).toByteArray();
+    const QByteArray savedOutputId = settings.value(SettingsKeys::audioOutputDeviceId).toByteArray();
+    const bool haveSavedRigModel = settings.contains(SettingsKeys::rigModel);
+    const int savedRigModel = settings.value(SettingsKeys::rigModel).toInt();
+    const QString savedRigPort = settings.value(SettingsKeys::rigPort).toString();
+    const QString savedBaudRate = settings.value(SettingsKeys::rigBaudRate).toString();
     settings.endGroup();
 
     selectDevice(m_audioInputCombo, savedInputId, QMediaDevices::defaultAudioInput());
@@ -209,14 +203,14 @@ void SettingsDialog::save()
 {
     QSettings settings;
 
-    settings.setValue(kCallsignKey, m_callsignEdit->text().trimmed());
+    settings.setValue(SettingsKeys::callsign, m_callsignEdit->text().trimmed());
 
-    settings.beginGroup(kTransceiverGroup);
-    settings.setValue(kAudioInputKey, m_audioInputCombo->currentData().toByteArray());
-    settings.setValue(kAudioOutputKey, m_audioOutputCombo->currentData().toByteArray());
-    settings.setValue(kRigModelKey, m_rigModelCombo->currentData().toInt());
-    settings.setValue(kRigPortKey, m_rigPortCombo->currentText().trimmed());
-    settings.setValue(kRigBaudRateKey, m_rigBaudRateCombo->currentText());
+    settings.beginGroup(SettingsKeys::transceiverGroup);
+    settings.setValue(SettingsKeys::audioInputDeviceId, m_audioInputCombo->currentData().toByteArray());
+    settings.setValue(SettingsKeys::audioOutputDeviceId, m_audioOutputCombo->currentData().toByteArray());
+    settings.setValue(SettingsKeys::rigModel, m_rigModelCombo->currentData().toInt());
+    settings.setValue(SettingsKeys::rigPort, m_rigPortCombo->currentText().trimmed());
+    settings.setValue(SettingsKeys::rigBaudRate, m_rigBaudRateCombo->currentText());
     settings.endGroup();
 
     accept();

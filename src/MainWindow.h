@@ -2,25 +2,34 @@
 
 #include <QMainWindow>
 
+#include <cstdint>
+
 class QLineEdit;
 class QPushButton;
 class QScrollArea;
 class QVBoxLayout;
+class QAudioSource;
+class QAudioSink;
+class QBuffer;
+class QIODevice;
+class JttyDecoder;
 
 // Top-level window: a scrolling column of speech-bubble messages above
 // a text field + Send button, in the style of a simple iMessage-like client.
+// Sending transmits over JTTY (see src/JttyCodec.h); received JTTY messages
+// appear as incoming bubbles via a continuously running JttyDecoder.
 class MainWindow : public QMainWindow
 {
     Q_OBJECT
 
 public:
     explicit MainWindow(QWidget *parent = nullptr);
+    ~MainWindow() override;
 
 public slots:
     // Appends a message bubble. isSent = true renders it as an outgoing
     // (right-aligned, blue) bubble; false renders it as incoming
-    // (left-aligned, grey) bubble. This is the entry point a future
-    // networking/backend layer would call for messages arriving from others.
+    // (left-aligned, grey) bubble.
     void addMessage(const QString &text, bool isSent);
 
 protected:
@@ -28,17 +37,28 @@ protected:
 
 private slots:
     void sendMessage();
-    void simulateIncomingReply(const QString &originalText);
     void openSettingsDialog();
+    void onJttyMessageDecoded(QString text, float frequencyHz);
 
 private:
     void createMenuBar();
     void updateBubbleWidths();
     void scrollToBottom();
 
+    void startJttyReceiver();
+    void stopJttyReceiver();
+    void transmitJtty(const QVector<int16_t> &samples);
+
     QScrollArea *m_scrollArea;
     QWidget *m_messagesContainer;
     QVBoxLayout *m_messagesLayout;
     QLineEdit *m_inputField;
     QPushButton *m_sendButton;
+
+    JttyDecoder *m_jttyDecoder;
+    QAudioSource *m_audioSource = nullptr;
+    QIODevice *m_audioSourceDevice = nullptr;
+
+    QAudioSink *m_audioSink = nullptr;
+    QBuffer *m_txBuffer = nullptr;
 };

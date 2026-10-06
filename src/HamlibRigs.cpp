@@ -32,22 +32,15 @@ QList<RigInfo> loadRigs()
     return rigs;
 }
 
-} // namespace
-
-const QList<RigInfo> &hamlibAvailableRigs()
+// Initializes and opens a rig, applying the given port/baud. On failure,
+// returns null and fills *errorMessage; the caller owns the returned RIG on
+// success and must rig_close()+rig_cleanup() it.
+RIG *openRig(int model, const QString &port, const QString &baudRate, QString *errorMessage)
 {
-    static const QList<RigInfo> rigs = loadRigs();
-    return rigs;
-}
-
-RigConnectionResult connectAndQueryRig(int model, const QString &port, const QString &baudRate)
-{
-    RigConnectionResult result;
-
     RIG *rig = rig_init(model);
     if (!rig) {
-        result.message = QStringLiteral("Could not initialize this rig model.");
-        return result;
+        *errorMessage = QStringLiteral("Could not initialize this rig model.");
+        return nullptr;
     }
 
     const QByteArray portBytes = port.toUtf8();
@@ -62,16 +55,34 @@ RigConnectionResult connectAndQueryRig(int model, const QString &port, const QSt
     if (baudOk)
         rig->state.rigport.parm.serial.rate = baud;
 
-    int retcode = rig_open(rig);
+    const int retcode = rig_open(rig);
     if (retcode != RIG_OK) {
-        result.message = QStringLiteral("Connection failed: %1")
-                              .arg(QString::fromUtf8(rigerror2(retcode)).trimmed());
+        *errorMessage = QStringLiteral("Connection failed: %1")
+                             .arg(QString::fromUtf8(rigerror2(retcode)).trimmed());
         rig_cleanup(rig);
-        return result;
+        return nullptr;
     }
+    return rig;
+}
+
+} // namespace
+
+const QList<RigInfo> &hamlibAvailableRigs()
+{
+    static const QList<RigInfo> rigs = loadRigs();
+    return rigs;
+}
+
+RigConnectionResult connectAndQueryRig(int model, const QString &port, const QString &baudRate)
+{
+    RigConnectionResult result;
+
+    RIG *rig = openRig(model, port, baudRate, &result.message);
+    if (!rig)
+        return result;
 
     freq_t freq = 0;
-    retcode = rig_get_freq(rig, RIG_VFO_CURR, &freq);
+    int retcode = rig_get_freq(rig, RIG_VFO_CURR, &freq);
     if (retcode != RIG_OK) {
         result.message = QStringLiteral("Connected, but could not read frequency: %1")
                               .arg(QString::fromUtf8(rigerror2(retcode)).trimmed());
@@ -97,4 +108,23 @@ RigConnectionResult connectAndQueryRig(int model, const QString &port, const QSt
     result.success = true;
     result.message = QStringLiteral("%1 MHz  %2").arg(QString::number(freq / 1.0e6, 'f', 6), modeText);
     return result;
+}
+
+QString setRigPtt(int model, const QString &port, const QString &baudRate, bool on)
+{
+    QString errorMessage;
+    RIG *rig = openRig(model, port, baudRate, &errorMessage);
+    if (!rig)
+        return errorMessage;
+
+    const int retcode = rig_set_ptt(rig, RIG_VFO_CURR, on ? RIG_PTT_ON : RIG_PTT_OFF);
+    rig_close(rig);
+    rig_cleanup(rig);
+
+    if (retcode != RIG_OK) {
+        return QStringLiteral("PTT %1 failed: %2")
+            .arg(on ? QStringLiteral("on") : QStringLiteral("off"),
+                 QString::fromUtf8(rigerror2(retcode)).trimmed());
+    }
+    return {};
 }
