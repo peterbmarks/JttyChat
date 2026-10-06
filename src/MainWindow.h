@@ -48,6 +48,7 @@ private:
     void startJttyReceiver();
     void stopJttyReceiver();
     void transmitJtty(const QVector<int16_t> &samples);
+    void tuneRigToFrequency(double freqMHz);
 
     QScrollArea *m_scrollArea;
     QWidget *m_messagesContainer;

@@ -34,3 +34,8 @@ RigConnectionResult connectAndQueryRig(int model, const QString &port, const QSt
 // Meant to run off the UI thread (serial open can block briefly). Returns an
 // error message, or an empty string on success.
 QString setRigPtt(int model, const QString &port, const QString &baudRate, bool on);
+
+// Opens the rig just long enough to set its current VFO frequency (in Hz),
+// then closes it again. Meant to run off the UI thread. Returns an error
+// message, or an empty string on success.
+QString setRigFrequency(int model, const QString &port, const QString &baudRate, double freqHz);

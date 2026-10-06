@@ -128,3 +128,21 @@ QString setRigPtt(int model, const QString &port, const QString &baudRate, bool 
     }
     return {};
 }
+
+QString setRigFrequency(int model, const QString &port, const QString &baudRate, double freqHz)
+{
+    QString errorMessage;
+    RIG *rig = openRig(model, port, baudRate, &errorMessage);
+    if (!rig)
+        return errorMessage;
+
+    const int retcode = rig_set_freq(rig, RIG_VFO_CURR, freqHz);
+    rig_close(rig);
+    rig_cleanup(rig);
+
+    if (retcode != RIG_OK) {
+        return QStringLiteral("Set frequency failed: %1")
+            .arg(QString::fromUtf8(rigerror2(retcode)).trimmed());
+    }
+    return {};
+}

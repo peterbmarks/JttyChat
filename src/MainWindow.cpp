@@ -20,6 +20,7 @@
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
+#include <QMetaObject>
 #include <QPushButton>
 #include <QScrollArea>
 #include <QScrollBar>
@@ -173,6 +174,16 @@ void MainWindow::createMenuBar()
     quitAction->setMenuRole(QAction::QuitRole);
     quitAction->setShortcut(QKeySequence::Quit);
     connect(quitAction, &QAction::triggered, qApp, &QApplication::quit);
+
+    QMenu *freqMenu = menuBar()->addMenu(QStringLiteral("Fre&quency"));
+    static constexpr double kBandFrequenciesMHz[] = {1.838, 3.575, 7.090,  10.140, 14.090,
+                                                       18.100, 21.090, 24.920, 28.090};
+    for (double freqMHz : kBandFrequenciesMHz) {
+        QAction *freqAction =
+            freqMenu->addAction(QStringLiteral("%1 MHz").arg(freqMHz, 0, 'f', 3));
+        connect(freqAction, &QAction::triggered, this,
+                [this, freqMHz]() { tuneRigToFrequency(freqMHz); });
+    }
 }
 
 void MainWindow::openSettingsDialog()
@@ -265,6 +276,25 @@ void MainWindow::transmitJtty(const QVector<int16_t> &samples)
         m_sendButton->setEnabled(true);
         m_inputField->setFocus();
     });
+}
+
+void MainWindow::tuneRigToFrequency(double freqMHz)
+{
+    const RigTxSettings rig = loadRigTxSettings();
+    if (!rig.configured) {
+        QMessageBox::warning(this, tr("Frequency"),
+                              tr("Configure a rig model and port in Settings first."));
+        return;
+    }
+
+    std::thread([this, rig, freqMHz]() {
+        const QString error = setRigFrequency(rig.model, rig.port, rig.baudRate, freqMHz * 1.0e6);
+        if (!error.isEmpty()) {
+            QMetaObject::invokeMethod(
+                this, [this, error]() { QMessageBox::warning(this, tr("Frequency"), error); },
+                Qt::QueuedConnection);
+        }
+    }).detach();
 }
 
 void MainWindow::startJttyReceiver()
