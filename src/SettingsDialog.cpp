@@ -8,10 +8,15 @@
 #include <QDir>
 #include <QFormLayout>
 #include <QGroupBox>
+#include <QLabel>
 #include <QLineEdit>
 #include <QMediaDevices>
+#include <QMetaObject>
+#include <QPushButton>
 #include <QSettings>
 #include <QVBoxLayout>
+
+#include <thread>
 
 namespace {
 constexpr auto kCallsignKey = "callsign";
@@ -73,6 +78,14 @@ SettingsDialog::SettingsDialog(QWidget *parent)
 
     m_rigBaudRateCombo = new QComboBox(transceiverGroup);
     transceiverForm->addRow(QStringLiteral("Rig Baud Rate:"), m_rigBaudRateCombo);
+
+    m_connectButton = new QPushButton(QStringLiteral("Connect"), transceiverGroup);
+    transceiverForm->addRow(QString(), m_connectButton);
+    connect(m_connectButton, &QPushButton::clicked, this, &SettingsDialog::connectToRig);
+
+    m_rigStatusLabel = new QLabel(transceiverGroup);
+    m_rigStatusLabel->setWordWrap(true);
+    transceiverForm->addRow(QString(), m_rigStatusLabel);
 
     mainLayout->addWidget(transceiverGroup);
 
@@ -160,6 +173,36 @@ void SettingsDialog::loadSettings()
 
     const int baudIndex = m_rigBaudRateCombo->findText(savedBaudRate);
     m_rigBaudRateCombo->setCurrentIndex(baudIndex < 0 ? 0 : baudIndex);
+}
+
+void SettingsDialog::connectToRig()
+{
+    if (m_rigModelCombo->currentData().isNull()) {
+        m_rigStatusLabel->setStyleSheet(QStringLiteral("color: #c0392b;"));
+        m_rigStatusLabel->setText(QStringLiteral("Select a rig model first."));
+        return;
+    }
+
+    const int model = m_rigModelCombo->currentData().toInt();
+    const QString port = m_rigPortCombo->currentText().trimmed();
+    const QString baudRate = m_rigBaudRateCombo->currentText();
+
+    m_connectButton->setEnabled(false);
+    m_rigStatusLabel->setStyleSheet(QString());
+    m_rigStatusLabel->setText(QStringLiteral("Connecting..."));
+
+    // Opening a serial port can block for a while (Hamlib retries reads
+    // before giving up), so do it off the UI thread and post the result
+    // back. Using `this` as the invokeMethod context means the queued call
+    // is silently dropped if the dialog is closed before it runs.
+    std::thread([this, model, port, baudRate]() {
+        const RigConnectionResult result = connectAndQueryRig(model, port, baudRate);
+        QMetaObject::invokeMethod(this, [this, result]() {
+            m_rigStatusLabel->setStyleSheet(result.success ? QString() : QStringLiteral("color: #c0392b;"));
+            m_rigStatusLabel->setText(result.message);
+            m_connectButton->setEnabled(true);
+        }, Qt::QueuedConnection);
+    }).detach();
 }
 
 void SettingsDialog::save()

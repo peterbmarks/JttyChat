@@ -4,6 +4,8 @@
 
 class QLineEdit;
 class QComboBox;
+class QLabel;
+class QPushButton;
 
 // Application settings dialog. Persists its fields via QSettings and
 // reloads them each time the dialog is opened, so it always reflects
@@ -17,6 +19,7 @@ public:
 
 private slots:
     void save();
+    void connectToRig();
 
 private:
     void loadSettings();
@@ -31,4 +34,6 @@ private:
     QComboBox *m_rigModelCombo;
     QComboBox *m_rigPortCombo;
     QComboBox *m_rigBaudRateCombo;
+    QPushButton *m_connectButton;
+    QLabel *m_rigStatusLabel;
 };
