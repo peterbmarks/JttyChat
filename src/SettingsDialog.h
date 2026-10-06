@@ -21,8 +21,14 @@ private slots:
 private:
     void loadSettings();
     void populateAudioDevices();
+    void populateRigModels();
+    void populateRigPorts();
+    void populateRigBaudRates();
 
     QLineEdit *m_callsignEdit;
     QComboBox *m_audioInputCombo;
     QComboBox *m_audioOutputCombo;
+    QComboBox *m_rigModelCombo;
+    QComboBox *m_rigPortCombo;
+    QComboBox *m_rigBaudRateCombo;
 };

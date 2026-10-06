@@ -10,6 +10,9 @@ set(CMAKE_AUTOUIC ON)
 
 find_package(Qt6 REQUIRED COMPONENTS Widgets Multimedia)
 
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(HAMLIB REQUIRED IMPORTED_TARGET hamlib)
+
 add_executable(JttyChat
     src/main.cpp
     src/MainWindow.h
@@ -18,9 +21,11 @@ add_executable(JttyChat
     src/ChatBubble.cpp
     src/SettingsDialog.h
     src/SettingsDialog.cpp
+    src/HamlibRigs.h
+    src/HamlibRigs.cpp
 )
 
-target_link_libraries(JttyChat PRIVATE Qt6::Widgets Qt6::Multimedia)
+target_link_libraries(JttyChat PRIVATE Qt6::Widgets Qt6::Multimedia PkgConfig::HAMLIB)
 
 install(TARGETS JttyChat RUNTIME DESTINATION bin)
 install(FILES packaging/jttychat.desktop DESTINATION share/applications)

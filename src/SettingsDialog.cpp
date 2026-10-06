@@ -1,8 +1,11 @@
 #include "SettingsDialog.h"
+#include "HamlibRigs.h"
 
 #include <QAudioDevice>
 #include <QComboBox>
+#include <QCompleter>
 #include <QDialogButtonBox>
+#include <QDir>
 #include <QFormLayout>
 #include <QGroupBox>
 #include <QLineEdit>
@@ -15,6 +18,10 @@ constexpr auto kCallsignKey = "callsign";
 constexpr auto kTransceiverGroup = "Transceiver";
 constexpr auto kAudioInputKey = "audioInputDeviceId";
 constexpr auto kAudioOutputKey = "audioOutputDeviceId";
+constexpr auto kRigModelKey = "rigModel";
+constexpr auto kRigPortKey = "rigPort";
+constexpr auto kRigBaudRateKey = "rigBaudRate";
+constexpr auto kDefaultBaudRate = "Default";
 
 // Selects the combo box entry whose stored device id matches savedId,
 // falling back to the system default device if there's no saved id (or
@@ -53,6 +60,20 @@ SettingsDialog::SettingsDialog(QWidget *parent)
     m_audioOutputCombo = new QComboBox(transceiverGroup);
     transceiverForm->addRow(QStringLiteral("Audio Output:"), m_audioOutputCombo);
 
+    // CAT control (Hamlib): which rig, and how to reach it.
+    m_rigModelCombo = new QComboBox(transceiverGroup);
+    m_rigModelCombo->setEditable(true);
+    m_rigModelCombo->setInsertPolicy(QComboBox::NoInsert);
+    transceiverForm->addRow(QStringLiteral("Rig Model:"), m_rigModelCombo);
+
+    m_rigPortCombo = new QComboBox(transceiverGroup);
+    m_rigPortCombo->setEditable(true);
+    m_rigPortCombo->setInsertPolicy(QComboBox::NoInsert);
+    transceiverForm->addRow(QStringLiteral("Rig Port:"), m_rigPortCombo);
+
+    m_rigBaudRateCombo = new QComboBox(transceiverGroup);
+    transceiverForm->addRow(QStringLiteral("Rig Baud Rate:"), m_rigBaudRateCombo);
+
     mainLayout->addWidget(transceiverGroup);
 
     auto *buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
@@ -61,6 +82,9 @@ SettingsDialog::SettingsDialog(QWidget *parent)
     mainLayout->addWidget(buttonBox);
 
     populateAudioDevices();
+    populateRigModels();
+    populateRigPorts();
+    populateRigBaudRates();
     loadSettings();
 }
 
@@ -75,6 +99,42 @@ void SettingsDialog::populateAudioDevices()
         m_audioOutputCombo->addItem(device.description(), QVariant::fromValue(device.id()));
 }
 
+void SettingsDialog::populateRigModels()
+{
+    m_rigModelCombo->clear();
+    for (const RigInfo &rig : hamlibAvailableRigs())
+        m_rigModelCombo->addItem(rig.label, rig.model);
+
+    // The 300+ Hamlib rig list is easier to use as a type-to-filter box
+    // than a plain dropdown; match anywhere in the name, not just the start.
+    if (QCompleter *completer = m_rigModelCombo->completer()) {
+        completer->setFilterMode(Qt::MatchContains);
+        completer->setCaseSensitivity(Qt::CaseInsensitive);
+    }
+}
+
+void SettingsDialog::populateRigPorts()
+{
+    m_rigPortCombo->clear();
+
+    QDir devDir(QStringLiteral("/dev"));
+    const QStringList filters{QStringLiteral("ttyUSB*"), QStringLiteral("ttyACM*"), QStringLiteral("ttyS*")};
+    for (const QString &name : devDir.entryList(filters, QDir::System, QDir::Name))
+        m_rigPortCombo->addItem(devDir.filePath(name));
+
+    // Not a serial device: rigctld (hamlib's network rig daemon), for the
+    // "Hamlib NET rigctl" model.
+    m_rigPortCombo->addItem(QStringLiteral("localhost:4532"));
+}
+
+void SettingsDialog::populateRigBaudRates()
+{
+    m_rigBaudRateCombo->clear();
+    m_rigBaudRateCombo->addItem(QString::fromLatin1(kDefaultBaudRate));
+    for (const char *rate : {"1200", "2400", "4800", "9600", "19200", "38400", "57600", "115200"})
+        m_rigBaudRateCombo->addItem(QString::fromLatin1(rate));
+}
+
 void SettingsDialog::loadSettings()
 {
     QSettings settings;
@@ -84,10 +144,22 @@ void SettingsDialog::loadSettings()
     settings.beginGroup(kTransceiverGroup);
     const QByteArray savedInputId = settings.value(kAudioInputKey).toByteArray();
     const QByteArray savedOutputId = settings.value(kAudioOutputKey).toByteArray();
+    const bool haveSavedRigModel = settings.contains(kRigModelKey);
+    const int savedRigModel = settings.value(kRigModelKey).toInt();
+    const QString savedRigPort = settings.value(kRigPortKey).toString();
+    const QString savedBaudRate = settings.value(kRigBaudRateKey).toString();
     settings.endGroup();
 
     selectDevice(m_audioInputCombo, savedInputId, QMediaDevices::defaultAudioInput());
     selectDevice(m_audioOutputCombo, savedOutputId, QMediaDevices::defaultAudioOutput());
+
+    int rigModelIndex = haveSavedRigModel ? m_rigModelCombo->findData(savedRigModel) : -1;
+    m_rigModelCombo->setCurrentIndex(rigModelIndex < 0 ? 0 : rigModelIndex);
+
+    m_rigPortCombo->setCurrentText(savedRigPort);
+
+    const int baudIndex = m_rigBaudRateCombo->findText(savedBaudRate);
+    m_rigBaudRateCombo->setCurrentIndex(baudIndex < 0 ? 0 : baudIndex);
 }
 
 void SettingsDialog::save()
@@ -99,6 +171,9 @@ void SettingsDialog::save()
     settings.beginGroup(kTransceiverGroup);
     settings.setValue(kAudioInputKey, m_audioInputCombo->currentData().toByteArray());
     settings.setValue(kAudioOutputKey, m_audioOutputCombo->currentData().toByteArray());
+    settings.setValue(kRigModelKey, m_rigModelCombo->currentData().toInt());
+    settings.setValue(kRigPortKey, m_rigPortCombo->currentText().trimmed());
+    settings.setValue(kRigBaudRateKey, m_rigBaudRateCombo->currentText());
     settings.endGroup();
 
     accept();
