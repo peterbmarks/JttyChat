@@ -29,8 +29,10 @@ protected:
 private slots:
     void sendMessage();
     void simulateIncomingReply(const QString &originalText);
+    void openSettingsDialog();
 
 private:
+    void createMenuBar();
     void updateBubbleWidths();
     void scrollToBottom();
 

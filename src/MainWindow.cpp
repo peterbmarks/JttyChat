@@ -1,8 +1,12 @@
 #include "MainWindow.h"
 #include "ChatBubble.h"
+#include "SettingsDialog.h"
 
+#include <QAction>
 #include <QKeyEvent>
 #include <QLineEdit>
+#include <QMenu>
+#include <QMenuBar>
 #include <QPushButton>
 #include <QScrollArea>
 #include <QScrollBar>
@@ -19,6 +23,8 @@ MainWindow::MainWindow(QWidget *parent)
 {
     setWindowTitle(QStringLiteral("JttyChat"));
     resize(420, 640);
+
+    createMenuBar();
 
     auto *central = new QWidget(this);
     auto *rootLayout = new QVBoxLayout(central);
@@ -90,6 +96,22 @@ MainWindow::MainWindow(QWidget *parent)
     connect(m_inputField, &QLineEdit::returnPressed, this, &MainWindow::sendMessage);
 
     m_inputField->setFocus();
+}
+
+void MainWindow::createMenuBar()
+{
+    QMenu *fileMenu = menuBar()->addMenu(QStringLiteral("&File"));
+
+    QAction *settingsAction = fileMenu->addAction(QStringLiteral("&Settings..."));
+    settingsAction->setMenuRole(QAction::PreferencesRole);
+    settingsAction->setShortcut(QKeySequence::Preferences);
+    connect(settingsAction, &QAction::triggered, this, &MainWindow::openSettingsDialog);
+}
+
+void MainWindow::openSettingsDialog()
+{
+    SettingsDialog dialog(this);
+    dialog.exec();
 }
 
 void MainWindow::sendMessage()

@@ -8,7 +8,7 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Widgets)
+find_package(Qt6 REQUIRED COMPONENTS Widgets Multimedia)
 
 add_executable(JttyChat
     src/main.cpp
@@ -16,9 +16,11 @@ add_executable(JttyChat
     src/MainWindow.cpp
     src/ChatBubble.h
     src/ChatBubble.cpp
+    src/SettingsDialog.h
+    src/SettingsDialog.cpp
 )
 
-target_link_libraries(JttyChat PRIVATE Qt6::Widgets)
+target_link_libraries(JttyChat PRIVATE Qt6::Widgets Qt6::Multimedia)
 
 install(TARGETS JttyChat RUNTIME DESTINATION bin)
 install(FILES packaging/jttychat.desktop DESTINATION share/applications)
