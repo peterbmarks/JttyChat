@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=JttyChat
+Comment=Simple iMessage-style chat client
+Exec=JttyChat
+Icon=jttychat
+Categories=Network;InstantMessaging;
+Terminal=false
