@@ -3,6 +3,7 @@
 #include "SettingsDialog.h"
 
 #include <QAction>
+#include <QApplication>
 #include <QKeyEvent>
 #include <QLineEdit>
 #include <QMenu>
@@ -106,6 +107,13 @@ void MainWindow::createMenuBar()
     settingsAction->setMenuRole(QAction::PreferencesRole);
     settingsAction->setShortcut(QKeySequence::Preferences);
     connect(settingsAction, &QAction::triggered, this, &MainWindow::openSettingsDialog);
+
+    fileMenu->addSeparator();
+
+    QAction *quitAction = fileMenu->addAction(QStringLiteral("&Quit"));
+    quitAction->setMenuRole(QAction::QuitRole);
+    quitAction->setShortcut(QKeySequence::Quit);
+    connect(quitAction, &QAction::triggered, qApp, &QApplication::quit);
 }
 
 void MainWindow::openSettingsDialog()
