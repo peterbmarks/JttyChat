@@ -38,7 +38,7 @@ constexpr int kMaxBubbleWidthFraction = 70; // percent of viewport width
 constexpr int kPttLeadMs = 150; // brief key-up lead before audio starts, for real radios
 constexpr int kSpectrumLowHz = 1400;
 constexpr int kSpectrumHighHz = 1700;
-constexpr int kSpectrumFftSize = 2048; // ~5.9 Hz/bin at the 12 kHz Rx rate
+constexpr int kSpectrumFftSize = 4096; // ~2.9 Hz/bin at the 12 kHz Rx rate
 constexpr int kTxTailMs = 200;  // margin after audio ends before unkeying/re-enabling Send
 
 QAudioDevice findAudioDevice(const QList<QAudioDevice> &devices, const QByteArray &id,
