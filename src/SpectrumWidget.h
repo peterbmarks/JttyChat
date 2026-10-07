@@ -1,11 +1,13 @@
 #pragma once
 
-#include <QWidget>
+#include <QImage>
 #include <QVector>
+#include <QWidget>
 
-// A small strip at the top of the window showing the live magnitude
-// spectrum of the received audio over a fixed frequency band. Fed by
-// AudioSpectrum via setMagnitudesDb().
+// A small waterfall at the top of the window: each new magnitude spectrum
+// of the received audio (over a fixed frequency band) becomes a new row,
+// with older rows scrolling down over time. Fed by AudioSpectrum via
+// setMagnitudesDb().
 class SpectrumWidget : public QWidget
 {
     Q_OBJECT
@@ -24,5 +26,5 @@ protected:
 private:
     int m_lowHz;
     int m_highHz;
-    QVector<float> m_magnitudesDb;
+    QImage m_waterfall; // one column per bin, one row per update; newest row on top
 };
