@@ -1,10 +1,12 @@
 #include "MainWindow.h"
 #include "AppSettingsKeys.h"
+#include "AudioSpectrum.h"
 #include "ChatBubble.h"
 #include "HamlibRigs.h"
 #include "JttyCodec.h"
 #include "JttyDecoder.h"
 #include "SettingsDialog.h"
+#include "SpectrumWidget.h"
 
 #include <QAction>
 #include <QApplication>
@@ -34,6 +36,9 @@
 namespace {
 constexpr int kMaxBubbleWidthFraction = 70; // percent of viewport width
 constexpr int kPttLeadMs = 150; // brief key-up lead before audio starts, for real radios
+constexpr int kSpectrumLowHz = 1400;
+constexpr int kSpectrumHighHz = 1700;
+constexpr int kSpectrumFftSize = 2048; // ~5.9 Hz/bin at the 12 kHz Rx rate
 constexpr int kTxTailMs = 200;  // margin after audio ends before unkeying/re-enabling Send
 
 QAudioDevice findAudioDevice(const QList<QAudioDevice> &devices, const QByteArray &id,
@@ -81,6 +86,10 @@ MainWindow::MainWindow(QWidget *parent)
     auto *rootLayout = new QVBoxLayout(central);
     rootLayout->setContentsMargins(0, 0, 0, 0);
     rootLayout->setSpacing(0);
+
+    // Live spectrum around the JTTY tone, from the receive audio.
+    m_spectrumWidget = new SpectrumWidget(kSpectrumLowHz, kSpectrumHighHz, central);
+    rootLayout->addWidget(m_spectrumWidget, 0);
 
     // Scrolling message history.
     m_scrollArea = new QScrollArea(central);
@@ -151,12 +160,16 @@ MainWindow::MainWindow(QWidget *parent)
 
     m_jttyDecoder = new JttyDecoder(this);
     connect(m_jttyDecoder, &JttyDecoder::messageDecoded, this, &MainWindow::onJttyMessageDecoded);
+
+    m_audioSpectrum = new AudioSpectrum(kSpectrumFftSize, Jtty::rxSampleRate);
+
     startJttyReceiver();
 }
 
 MainWindow::~MainWindow()
 {
     stopJttyReceiver();
+    delete m_audioSpectrum;
 }
 
 void MainWindow::createMenuBar()
@@ -332,6 +345,11 @@ void MainWindow::startJttyReceiver()
 
         QVector<int16_t> samples(sampleCount);
         std::memcpy(samples.data(), chunk.constData(), sampleCount * sizeof(int16_t));
+
+        QVector<float> magnitudesDb;
+        if (m_audioSpectrum->addSamples(samples, kSpectrumLowHz, kSpectrumHighHz, magnitudesDb))
+            m_spectrumWidget->setMagnitudesDb(magnitudesDb);
+
         m_jttyDecoder->addSamples(samples);
         m_jttyDecoder->poll();
     });

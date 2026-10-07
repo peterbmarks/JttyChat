@@ -13,6 +13,8 @@ class QAudioSink;
 class QBuffer;
 class QIODevice;
 class JttyDecoder;
+class SpectrumWidget;
+class AudioSpectrum;
 
 // Top-level window: a scrolling column of speech-bubble messages above
 // a text field + Send button, in the style of a simple iMessage-like client.
@@ -62,4 +64,7 @@ private:
 
     QAudioSink *m_audioSink = nullptr;
     QBuffer *m_txBuffer = nullptr;
+
+    SpectrumWidget *m_spectrumWidget;
+    AudioSpectrum *m_audioSpectrum;
 };
