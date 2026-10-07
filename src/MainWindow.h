@@ -67,4 +67,6 @@ private:
 
     SpectrumWidget *m_spectrumWidget;
     AudioSpectrum *m_audioSpectrum;
+
+    bool m_pendingScrollToBottom = false;
 };

@@ -108,6 +108,17 @@ MainWindow::MainWindow(QWidget *parent)
     m_scrollArea->setWidget(m_messagesContainer);
     rootLayout->addWidget(m_scrollArea, 1);
 
+    // The content height (and so the scrollbar's range) only settles once
+    // Qt actually reflows the newly added bubbles, which happens after
+    // addMessage() returns. Scrolling here, exactly when the range catches
+    // up, is reliable regardless of how many messages land in one burst -
+    // unlike guessing at a fixed delay.
+    connect(m_scrollArea->verticalScrollBar(), &QScrollBar::rangeChanged, this,
+            [this](int, int max) {
+                if (m_pendingScrollToBottom)
+                    m_scrollArea->verticalScrollBar()->setValue(max);
+            });
+
     // Bottom input bar.
     auto *inputBar = new QWidget(central);
     inputBar->setStyleSheet(QStringLiteral("background-color: #f2f2f2;"));
@@ -399,8 +410,10 @@ void MainWindow::updateBubbleWidths()
 
 void MainWindow::scrollToBottom()
 {
-    QTimer::singleShot(0, this, [this]() {
-        if (QScrollBar *bar = m_scrollArea->verticalScrollBar())
-            bar->setValue(bar->maximum());
-    });
+    // Best-effort immediate scroll (correct if the range is already
+    // current), backstopped by the rangeChanged handler above for once the
+    // new bubble's layout actually settles.
+    m_pendingScrollToBottom = true;
+    if (QScrollBar *bar = m_scrollArea->verticalScrollBar())
+        bar->setValue(bar->maximum());
 }
