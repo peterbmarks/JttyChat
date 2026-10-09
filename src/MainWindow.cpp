@@ -5,6 +5,7 @@
 #include "HamlibRigs.h"
 #include "JttyCodec.h"
 #include "JttyDecoder.h"
+#include "MacroEditDialog.h"
 #include "SettingsDialog.h"
 #include "SpectrumWidget.h"
 #include "TextCapitalization.h"
@@ -151,6 +152,45 @@ MainWindow::MainWindow(QWidget *parent)
                 if (m_pendingScrollToBottom)
                     m_scrollArea->verticalScrollBar()->setValue(max);
             });
+
+    // Macro button row, just above the input bar. Left-click inserts the
+    // button's text into the message field at the cursor; right-click
+    // edits the button's title/text (see MacroEditDialog).
+    auto *macroBar = new QWidget(central);
+    auto *macroLayout = new QHBoxLayout(macroBar);
+    macroLayout->setContentsMargins(8, 4, 8, 4);
+    macroLayout->setSpacing(6);
+
+    for (int i = 0; i < kMacroCount; ++i) {
+        auto *button = new QPushButton(macroBar);
+        button->setCursor(Qt::PointingHandCursor);
+        button->setContextMenuPolicy(Qt::CustomContextMenu);
+        button->setStyleSheet(QStringLiteral(
+            "QPushButton {"
+            "  background-color: #e5e5ea;"
+            "  border: none;"
+            "  border-radius: 8px;"
+            "  padding: 6px 2px;"
+            "  font-size: 12px;"
+            "}"
+            "QPushButton:hover {"
+            "  background-color: #d6d6db;"
+            "}"));
+
+        connect(button, &QPushButton::clicked, this, [this, i]() {
+            if (!m_macroTexts[i].isEmpty()) {
+                m_inputField->insert(m_macroTexts[i]);
+                m_inputField->setFocus();
+            }
+        });
+        connect(button, &QPushButton::customContextMenuRequested, this,
+                [this, i](const QPoint &) { editMacro(i); });
+
+        macroLayout->addWidget(button, 1);
+        m_macroButtons[i] = button;
+    }
+    rootLayout->addWidget(macroBar, 0);
+    loadMacros();
 
     // Bottom input bar.
     auto *inputBar = new QWidget(central);
@@ -459,6 +499,43 @@ QString MainWindow::formatForDisplay(const QString &text) const
     if (!settings.value(SettingsKeys::capitalizeText, false).toBool())
         return text;
     return TextCapitalization::apply(text);
+}
+
+void MainWindow::loadMacros()
+{
+    QSettings settings;
+    settings.beginGroup(SettingsKeys::macrosGroup);
+    for (int i = 0; i < kMacroCount; ++i) {
+        const QString defaultTitle = QStringLiteral("F%1").arg(i + 1);
+        const QString titleKey = QString(SettingsKeys::macroTitlePrefix) + QString::number(i + 1);
+        const QString textKey = QString(SettingsKeys::macroTextPrefix) + QString::number(i + 1);
+
+        m_macroButtons[i]->setText(settings.value(titleKey, defaultTitle).toString());
+        m_macroTexts[i] = settings.value(textKey).toString();
+    }
+    settings.endGroup();
+}
+
+void MainWindow::saveMacro(int index, const QString &title, const QString &text)
+{
+    const QString finalTitle = title.isEmpty() ? QStringLiteral("F%1").arg(index + 1) : title;
+
+    QSettings settings;
+    settings.beginGroup(SettingsKeys::macrosGroup);
+    settings.setValue(QString(SettingsKeys::macroTitlePrefix) + QString::number(index + 1),
+                       finalTitle);
+    settings.setValue(QString(SettingsKeys::macroTextPrefix) + QString::number(index + 1), text);
+    settings.endGroup();
+
+    m_macroButtons[index]->setText(finalTitle);
+    m_macroTexts[index] = text;
+}
+
+void MainWindow::editMacro(int index)
+{
+    MacroEditDialog dialog(m_macroButtons[index]->text(), m_macroTexts[index], this);
+    if (dialog.exec() == QDialog::Accepted)
+        saveMacro(index, dialog.buttonTitle(), dialog.macroText());
 }
 
 void MainWindow::resizeEvent(QResizeEvent *event)

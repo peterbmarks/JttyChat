@@ -44,6 +44,8 @@ add_executable(JttyChat
     src/SpectrumWidget.cpp
     src/TextCapitalization.h
     src/TextCapitalization.cpp
+    src/MacroEditDialog.h
+    src/MacroEditDialog.cpp
 )
 
 target_link_libraries(JttyChat PRIVATE Qt6::Widgets Qt6::Multimedia PkgConfig::HAMLIB

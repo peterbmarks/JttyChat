@@ -4,6 +4,7 @@
 #include <QMainWindow>
 #include <QPointer>
 
+#include <array>
 #include <cstdint>
 
 class QLabel;
@@ -56,6 +57,10 @@ private:
     void updateBubbleWidths();
     void scrollToBottom();
 
+    void loadMacros();
+    void saveMacro(int index, const QString &title, const QString &text);
+    void editMacro(int index);
+
     void startJttyReceiver();
     void stopJttyReceiver();
     void transmitJtty(const QVector<int16_t> &samples);
@@ -89,4 +94,10 @@ private:
     // so later frames of the same message update the existing bubble
     // instead of creating a new one. Erased once a message completes.
     QHash<qint64, QPointer<ChatBubble>> m_pendingReceivedBubbles;
+
+    // Macro button row above the input bar: left-click inserts macroTexts[i]
+    // into the message field, right-click edits that button's title/text.
+    static constexpr int kMacroCount = 8;
+    std::array<QPushButton *, kMacroCount> m_macroButtons;
+    std::array<QString, kMacroCount> m_macroTexts;
 };

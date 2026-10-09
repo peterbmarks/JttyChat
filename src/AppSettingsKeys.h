@@ -13,4 +13,10 @@ constexpr auto audioOutputDeviceId = "audioOutputDeviceId";
 constexpr auto rigModel = "rigModel";
 constexpr auto rigPort = "rigPort";
 constexpr auto rigBaudRate = "rigBaudRate";
+
+// Macro button bar: groups "macroTitle1".."macroTitle8" and
+// "macroText1".."macroText8" (see MainWindow::loadMacros/saveMacro).
+constexpr auto macrosGroup = "Macros";
+constexpr auto macroTitlePrefix = "macroTitle";
+constexpr auto macroTextPrefix = "macroText";
 } // namespace SettingsKeys
