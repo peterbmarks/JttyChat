@@ -41,6 +41,7 @@ public slots:
 
 protected:
     void resizeEvent(QResizeEvent *event) override;
+    bool eventFilter(QObject *watched, QEvent *event) override;
 
 private slots:
     void sendMessage();
@@ -78,6 +79,10 @@ private:
     QTimer *m_decodeStatusClearTimer;
 
     bool m_pendingScrollToBottom = false;
+
+    // What the user typed into m_inputField last time Send was used,
+    // restored when they press Up in an empty-ish field (see eventFilter).
+    QString m_lastSentMessage;
 
     // Bubbles for JTTY messages still being received, keyed by message ID,
     // so later frames of the same message update the existing bubble

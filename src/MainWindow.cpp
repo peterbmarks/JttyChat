@@ -198,6 +198,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     connect(m_sendButton, &QPushButton::clicked, this, &MainWindow::sendMessage);
     connect(m_inputField, &QLineEdit::returnPressed, this, &MainWindow::sendMessage);
+    m_inputField->installEventFilter(this);
 
     m_inputField->setFocus();
 
@@ -254,11 +255,11 @@ void MainWindow::openSettingsDialog()
 
 void MainWindow::sendMessage()
 {
-    QString text = m_inputField->text().trimmed();
-    if (text.isEmpty())
+    const QString typedText = m_inputField->text().trimmed();
+    if (typedText.isEmpty())
         return;
 
-    text = withCallsignAppended(text);
+    const QString text = withCallsignAppended(typedText);
 
     const Jtty::EncodedMessage encoded = Jtty::encodeMessage(text, Jtty::defaultToneHz);
     if (!encoded.ok) {
@@ -267,6 +268,8 @@ void MainWindow::sendMessage()
                "16 frames' worth of compact atoms to send)."));
         return;
     }
+
+    m_lastSentMessage = typedText;
 
     addMessage(encoded.canonicalText, true);
     m_inputField->clear();
@@ -453,6 +456,19 @@ void MainWindow::resizeEvent(QResizeEvent *event)
 {
     QMainWindow::resizeEvent(event);
     updateBubbleWidths();
+}
+
+bool MainWindow::eventFilter(QObject *watched, QEvent *event)
+{
+    if (watched == m_inputField && event->type() == QEvent::KeyPress) {
+        auto *keyEvent = static_cast<QKeyEvent *>(event);
+        if (keyEvent->key() == Qt::Key_Up && !m_lastSentMessage.isEmpty()) {
+            m_inputField->setText(m_lastSentMessage);
+            m_inputField->selectAll();
+            return true;
+        }
+    }
+    return QMainWindow::eventFilter(watched, event);
 }
 
 void MainWindow::updateBubbleWidths()
