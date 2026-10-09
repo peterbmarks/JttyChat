@@ -19,6 +19,9 @@ received from other stations appear as incoming chat bubbles.
   device selection, and a Transceiver section for Hamlib rig control (rig
   model, serial port, baud rate, and a Connect button to test the link and
   show the rig's current frequency and mode).
+- Captitalise text option to try to do sentence capitalisation
+- Append callsign adds your callsign to the end of messages
+- Macro buttons. Right click to set up. Click to insert text.
 - A build script that packages the app as a Linux AppImage for distribution.
 
 ## Building on Linux
