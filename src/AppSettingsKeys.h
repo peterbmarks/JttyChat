@@ -5,6 +5,7 @@
 // (MainWindow, for keying PTT and tuning the JTTY encoder/decoder).
 namespace SettingsKeys {
 constexpr auto callsign = "callsign";
+constexpr auto appendCallsign = "appendCallsign";
 constexpr auto transceiverGroup = "Transceiver";
 constexpr auto audioInputDeviceId = "audioInputDeviceId";
 constexpr auto audioOutputDeviceId = "audioOutputDeviceId";

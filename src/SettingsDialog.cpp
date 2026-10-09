@@ -3,6 +3,7 @@
 #include "HamlibRigs.h"
 
 #include <QAudioDevice>
+#include <QCheckBox>
 #include <QComboBox>
 #include <QCompleter>
 #include <QDialogButtonBox>
@@ -48,6 +49,12 @@ SettingsDialog::SettingsDialog(QWidget *parent)
     m_callsignEdit = new QLineEdit(this);
     m_callsignEdit->setPlaceholderText(QStringLiteral("e.g. W1AW"));
     generalForm->addRow(QStringLiteral("Callsign:"), m_callsignEdit);
+
+    m_appendCallsignCheck = new QCheckBox(QStringLiteral("Append callsign"), this);
+    m_appendCallsignCheck->setToolTip(
+        QStringLiteral("When sending, append \"-CALLSIGN\" to the message if it fits."));
+    generalForm->addRow(QString(), m_appendCallsignCheck);
+
     mainLayout->addLayout(generalForm);
 
     auto *transceiverGroup = new QGroupBox(QStringLiteral("Transceiver"), this);
@@ -147,6 +154,7 @@ void SettingsDialog::loadSettings()
     QSettings settings;
 
     m_callsignEdit->setText(settings.value(SettingsKeys::callsign).toString());
+    m_appendCallsignCheck->setChecked(settings.value(SettingsKeys::appendCallsign, false).toBool());
 
     settings.beginGroup(SettingsKeys::transceiverGroup);
     const QByteArray savedInputId = settings.value(SettingsKeys::audioInputDeviceId).toByteArray();
@@ -204,6 +212,7 @@ void SettingsDialog::save()
     QSettings settings;
 
     settings.setValue(SettingsKeys::callsign, m_callsignEdit->text().trimmed());
+    settings.setValue(SettingsKeys::appendCallsign, m_appendCallsignCheck->isChecked());
 
     settings.beginGroup(SettingsKeys::transceiverGroup);
     settings.setValue(SettingsKeys::audioInputDeviceId, m_audioInputCombo->currentData().toByteArray());

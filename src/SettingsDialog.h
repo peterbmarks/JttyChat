@@ -4,6 +4,7 @@
 
 class QLineEdit;
 class QComboBox;
+class QCheckBox;
 class QLabel;
 class QPushButton;
 
@@ -29,6 +30,7 @@ private:
     void populateRigBaudRates();
 
     QLineEdit *m_callsignEdit;
+    QCheckBox *m_appendCallsignCheck;
     QComboBox *m_audioInputCombo;
     QComboBox *m_audioOutputCombo;
     QComboBox *m_rigModelCombo;

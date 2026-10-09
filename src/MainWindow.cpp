@@ -72,6 +72,24 @@ RigTxSettings loadRigTxSettings()
     rig.configured = haveModel && !rig.port.isEmpty();
     return rig;
 }
+
+// If "Append callsign" is enabled and a callsign is configured, appends
+// "-CALLSIGN" to text, but only when it still fits within the JTTY message
+// length limit; otherwise returns text unchanged.
+QString withCallsignAppended(const QString &text)
+{
+    QSettings settings;
+    const bool appendCallsign = settings.value(SettingsKeys::appendCallsign, false).toBool();
+    const QString callsign = settings.value(SettingsKeys::callsign).toString().trimmed();
+    if (!appendCallsign || callsign.isEmpty())
+        return text;
+
+    const QString suffix = QStringLiteral("-%1").arg(callsign.toUpper());
+    if (text.length() + suffix.length() > Jtty::maxMessageLength)
+        return text;
+
+    return text + suffix;
+}
 }
 
 MainWindow::MainWindow(QWidget *parent)
@@ -222,9 +240,11 @@ void MainWindow::openSettingsDialog()
 
 void MainWindow::sendMessage()
 {
-    const QString text = m_inputField->text().trimmed();
+    QString text = m_inputField->text().trimmed();
     if (text.isEmpty())
         return;
+
+    text = withCallsignAppended(text);
 
     const Jtty::EncodedMessage encoded = Jtty::encodeMessage(text, Jtty::defaultToneHz);
     if (!encoded.ok) {
