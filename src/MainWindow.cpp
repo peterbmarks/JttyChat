@@ -188,7 +188,7 @@ MainWindow::MainWindow(QWidget *parent)
     m_inputField->setFocus();
 
     m_jttyDecoder = new JttyDecoder(this);
-    connect(m_jttyDecoder, &JttyDecoder::messageDecoded, this, &MainWindow::onJttyMessageDecoded);
+    connect(m_jttyDecoder, &JttyDecoder::messageUpdated, this, &MainWindow::onJttyMessageUpdated);
 
     m_audioSpectrum = new AudioSpectrum(kSpectrumFftSize, Jtty::rxSampleRate);
 
@@ -260,10 +260,26 @@ void MainWindow::sendMessage()
     transmitJtty(encoded.samples);
 }
 
-void MainWindow::onJttyMessageDecoded(QString text, float frequencyHz)
+void MainWindow::onJttyMessageUpdated(qint64 messageId, QString text, float frequencyHz,
+                                       bool complete)
 {
     Q_UNUSED(frequencyHz);
-    addMessage(text, false);
+
+    auto pending = m_pendingReceivedBubbles.find(messageId);
+    if (pending != m_pendingReceivedBubbles.end()) {
+        if (ChatBubble *bubble = *pending) {
+            bubble->setText(text);
+            updateBubbleWidths();
+            scrollToBottom();
+        }
+        if (complete)
+            m_pendingReceivedBubbles.erase(pending);
+        return;
+    }
+
+    ChatBubble *bubble = createBubble(text, false);
+    if (!complete)
+        m_pendingReceivedBubbles.insert(messageId, bubble);
 }
 
 void MainWindow::transmitJtty(const QVector<int16_t> &samples)
@@ -398,6 +414,11 @@ void MainWindow::stopJttyReceiver()
 
 void MainWindow::addMessage(const QString &text, bool isSent)
 {
+    createBubble(text, isSent);
+}
+
+ChatBubble *MainWindow::createBubble(const QString &text, bool isSent)
+{
     auto *bubble = new ChatBubble(text, isSent, m_messagesContainer);
 
     // Insert before the trailing stretch so new bubbles land at the bottom
@@ -407,6 +428,7 @@ void MainWindow::addMessage(const QString &text, bool isSent)
 
     updateBubbleWidths();
     scrollToBottom();
+    return bubble;
 }
 
 void MainWindow::resizeEvent(QResizeEvent *event)

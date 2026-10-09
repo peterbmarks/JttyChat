@@ -69,13 +69,13 @@ void JttyDecoder::poll()
                            (fortran_charlen_t)textBlocks.size());
 
         for (int i = 0; i < count; ++i) {
-            if (messageIds[i] <= 0 || !complete[i])
+            if (messageIds[i] <= 0)
                 continue;
             QString const text =
                 QString::fromLatin1(textBlocks.data() + i * kMessageLength, kMessageLength)
                     .trimmed();
             if (!text.isEmpty())
-                Q_EMIT messageDecoded(text, frequencies[i]);
+                Q_EMIT messageUpdated(messageIds[i], text, frequencies[i], complete[i]);
         }
     } while (count == kBatchSize);
 }

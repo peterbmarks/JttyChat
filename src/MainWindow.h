@@ -1,6 +1,8 @@
 #pragma once
 
+#include <QHash>
 #include <QMainWindow>
+#include <QPointer>
 
 #include <cstdint>
 
@@ -15,6 +17,7 @@ class QIODevice;
 class JttyDecoder;
 class SpectrumWidget;
 class AudioSpectrum;
+class ChatBubble;
 
 // Top-level window: a scrolling column of speech-bubble messages above
 // a text field + Send button, in the style of a simple iMessage-like client.
@@ -40,10 +43,11 @@ protected:
 private slots:
     void sendMessage();
     void openSettingsDialog();
-    void onJttyMessageDecoded(QString text, float frequencyHz);
+    void onJttyMessageUpdated(qint64 messageId, QString text, float frequencyHz, bool complete);
 
 private:
     void createMenuBar();
+    ChatBubble *createBubble(const QString &text, bool isSent);
     void updateBubbleWidths();
     void scrollToBottom();
 
@@ -69,4 +73,9 @@ private:
     AudioSpectrum *m_audioSpectrum;
 
     bool m_pendingScrollToBottom = false;
+
+    // Bubbles for JTTY messages still being received, keyed by message ID,
+    // so later frames of the same message update the existing bubble
+    // instead of creating a new one. Erased once a message completes.
+    QHash<qint64, QPointer<ChatBubble>> m_pendingReceivedBubbles;
 };

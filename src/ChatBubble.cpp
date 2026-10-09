@@ -50,3 +50,8 @@ void ChatBubble::setMaxBubbleWidth(int width)
 {
     m_label->setMaximumWidth(qMax(80, width));
 }
+
+void ChatBubble::setText(const QString &text)
+{
+    m_label->setText(text);
+}

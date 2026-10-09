@@ -6,7 +6,8 @@
 #include <cstdint>
 
 // Feeds a continuous stream of 12 kHz mono PCM samples to the JTTY decoder
-// (thirdparty/jtty_codec) and emits each message once it's fully received.
+// (thirdparty/jtty_codec) and emits each message's text as it decodes,
+// frame by frame, then once more when it's complete.
 //
 // The underlying Fortran decoder (rjtty_sub_) scans incrementally from where
 // it left off each call, keyed off the buffer length growing call to call;
@@ -31,7 +32,13 @@ public slots:
     void poll();
 
 signals:
-    void messageDecoded(QString text, float frequencyHz);
+    // Emitted each time a message's decoded text grows (including its first
+    // frame), so callers can show it filling in live; complete is true only
+    // on the final emission for a given messageId, once its end-of-message
+    // bit has been received. messageId is stable and unique for the life of
+    // the process (see thirdparty/jtty_codec), so it's safe to key UI state
+    // (e.g. which bubble to update) off it directly.
+    void messageUpdated(qint64 messageId, QString text, float frequencyHz, bool complete);
 
 private:
     QVector<int16_t> m_buffer;
