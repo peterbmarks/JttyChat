@@ -26,4 +26,5 @@ public:
 private:
     bool m_isSent;
     QLabel *m_label;
+    QLabel *m_timestampLabel;
 };
