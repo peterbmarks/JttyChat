@@ -6,6 +6,7 @@
 namespace SettingsKeys {
 constexpr auto callsign = "callsign";
 constexpr auto appendCallsign = "appendCallsign";
+constexpr auto capitalizeText = "capitalizeText";
 constexpr auto transceiverGroup = "Transceiver";
 constexpr auto audioInputDeviceId = "audioInputDeviceId";
 constexpr auto audioOutputDeviceId = "audioOutputDeviceId";

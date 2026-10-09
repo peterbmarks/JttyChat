@@ -52,6 +52,7 @@ private slots:
 private:
     void createMenuBar();
     ChatBubble *createBubble(const QString &text, bool isSent);
+    QString formatForDisplay(const QString &text) const;
     void updateBubbleWidths();
     void scrollToBottom();
 

@@ -55,6 +55,12 @@ SettingsDialog::SettingsDialog(QWidget *parent)
         QStringLiteral("When sending, append \"-CALLSIGN\" to the message if it fits."));
     generalForm->addRow(QString(), m_appendCallsignCheck);
 
+    m_capitalizeTextCheck = new QCheckBox(QStringLiteral("Capitalise text"), this);
+    m_capitalizeTextCheck->setToolTip(QStringLiteral(
+        "Display messages with sentence capitalisation instead of all upper case. "
+        "Words that look like callsigns are kept upper case."));
+    generalForm->addRow(QString(), m_capitalizeTextCheck);
+
     mainLayout->addLayout(generalForm);
 
     auto *transceiverGroup = new QGroupBox(QStringLiteral("Transceiver"), this);
@@ -155,6 +161,7 @@ void SettingsDialog::loadSettings()
 
     m_callsignEdit->setText(settings.value(SettingsKeys::callsign).toString());
     m_appendCallsignCheck->setChecked(settings.value(SettingsKeys::appendCallsign, false).toBool());
+    m_capitalizeTextCheck->setChecked(settings.value(SettingsKeys::capitalizeText, false).toBool());
 
     settings.beginGroup(SettingsKeys::transceiverGroup);
     const QByteArray savedInputId = settings.value(SettingsKeys::audioInputDeviceId).toByteArray();
@@ -213,6 +220,7 @@ void SettingsDialog::save()
 
     settings.setValue(SettingsKeys::callsign, m_callsignEdit->text().trimmed());
     settings.setValue(SettingsKeys::appendCallsign, m_appendCallsignCheck->isChecked());
+    settings.setValue(SettingsKeys::capitalizeText, m_capitalizeTextCheck->isChecked());
 
     settings.beginGroup(SettingsKeys::transceiverGroup);
     settings.setValue(SettingsKeys::audioInputDeviceId, m_audioInputCombo->currentData().toByteArray());

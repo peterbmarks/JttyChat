@@ -42,6 +42,8 @@ add_executable(JttyChat
     src/AudioSpectrum.cpp
     src/SpectrumWidget.h
     src/SpectrumWidget.cpp
+    src/TextCapitalization.h
+    src/TextCapitalization.cpp
 )
 
 target_link_libraries(JttyChat PRIVATE Qt6::Widgets Qt6::Multimedia PkgConfig::HAMLIB

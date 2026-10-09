@@ -7,6 +7,7 @@
 #include "JttyDecoder.h"
 #include "SettingsDialog.h"
 #include "SpectrumWidget.h"
+#include "TextCapitalization.h"
 
 #include <QAction>
 #include <QApplication>
@@ -289,7 +290,7 @@ void MainWindow::onJttyMessageUpdated(qint64 messageId, QString text, float freq
     auto pending = m_pendingReceivedBubbles.find(messageId);
     if (pending != m_pendingReceivedBubbles.end()) {
         if (ChatBubble *bubble = *pending) {
-            bubble->setText(text);
+            bubble->setText(formatForDisplay(text));
             updateBubbleWidths();
             scrollToBottom();
         }
@@ -440,7 +441,7 @@ void MainWindow::addMessage(const QString &text, bool isSent)
 
 ChatBubble *MainWindow::createBubble(const QString &text, bool isSent)
 {
-    auto *bubble = new ChatBubble(text, isSent, m_messagesContainer);
+    auto *bubble = new ChatBubble(formatForDisplay(text), isSent, m_messagesContainer);
 
     // Insert before the trailing stretch so new bubbles land at the bottom
     // of the scroll area while older ones stay pinned to the top.
@@ -450,6 +451,14 @@ ChatBubble *MainWindow::createBubble(const QString &text, bool isSent)
     updateBubbleWidths();
     scrollToBottom();
     return bubble;
+}
+
+QString MainWindow::formatForDisplay(const QString &text) const
+{
+    QSettings settings;
+    if (!settings.value(SettingsKeys::capitalizeText, false).toBool())
+        return text;
+    return TextCapitalization::apply(text);
 }
 
 void MainWindow::resizeEvent(QResizeEvent *event)

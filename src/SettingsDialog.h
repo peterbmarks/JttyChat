@@ -31,6 +31,7 @@ private:
 
     QLineEdit *m_callsignEdit;
     QCheckBox *m_appendCallsignCheck;
+    QCheckBox *m_capitalizeTextCheck;
     QComboBox *m_audioInputCombo;
     QComboBox *m_audioOutputCombo;
     QComboBox *m_rigModelCombo;
