@@ -37,8 +37,12 @@ signals:
     // on the final emission for a given messageId, once its end-of-message
     // bit has been received. messageId is stable and unique for the life of
     // the process (see thirdparty/jtty_codec), so it's safe to key UI state
-    // (e.g. which bubble to update) off it directly.
-    void messageUpdated(qint64 messageId, QString text, float frequencyHz, bool complete);
+    // (e.g. which bubble to update) off it directly. snrDb and errorCount
+    // describe the most recently decoded frame of this message (errorCount
+    // is the number of channel symbols that disagreed with the
+    // FEC-corrected codeword - 0 for a clean decode).
+    void messageUpdated(qint64 messageId, QString text, float frequencyHz, float snrDb,
+                         int errorCount, bool complete);
 
 private:
     QVector<int16_t> m_buffer;

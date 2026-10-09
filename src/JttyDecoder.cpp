@@ -23,7 +23,8 @@ constexpr qsizetype kMaxBufferSamples = 10 * 60 * Jtty::rxSampleRate;
 extern "C" {
 void rjtty_sub_(short int d2[], int *k, int *nsps, int *nfa, int *nfb, float *f0, float *ftol);
 void jtty_get_updates_(char text_blocks[], qint64 message_ids[], float frequencies[],
-                        float start_tsync[], bool eom[], int *count, fortran_charlen_t);
+                        float snrs[], int nerrors[], float start_tsync[], bool eom[], int *count,
+                        fortran_charlen_t);
 void jtty_release_fft_resources();
 }
 
@@ -62,10 +63,12 @@ void JttyDecoder::poll()
         std::array<char, kBatchSize * kMessageLength> textBlocks{};
         std::array<qint64, kBatchSize> messageIds{};
         std::array<float, kBatchSize> frequencies{};
+        std::array<float, kBatchSize> snrs{};
+        std::array<int, kBatchSize> errorCounts{};
         std::array<float, kBatchSize> sequenceStarts{};
         std::array<bool, kBatchSize> complete{};
-        jtty_get_updates_(textBlocks.data(), messageIds.data(), frequencies.data(),
-                           sequenceStarts.data(), complete.data(), &count,
+        jtty_get_updates_(textBlocks.data(), messageIds.data(), frequencies.data(), snrs.data(),
+                           errorCounts.data(), sequenceStarts.data(), complete.data(), &count,
                            (fortran_charlen_t)textBlocks.size());
 
         for (int i = 0; i < count; ++i) {
@@ -74,8 +77,10 @@ void JttyDecoder::poll()
             QString const text =
                 QString::fromLatin1(textBlocks.data() + i * kMessageLength, kMessageLength)
                     .trimmed();
-            if (!text.isEmpty())
-                Q_EMIT messageUpdated(messageIds[i], text, frequencies[i], complete[i]);
+            if (!text.isEmpty()) {
+                Q_EMIT messageUpdated(messageIds[i], text, frequencies[i], snrs[i],
+                                      errorCounts[i], complete[i]);
+            }
         }
     } while (count == kBatchSize);
 }

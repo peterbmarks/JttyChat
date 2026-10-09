@@ -17,6 +17,7 @@
 #include <QBuffer>
 #include <QHBoxLayout>
 #include <QKeyEvent>
+#include <QLabel>
 #include <QLineEdit>
 #include <QMediaDevices>
 #include <QMenu>
@@ -40,6 +41,7 @@ constexpr int kSpectrumLowHz = 1400;
 constexpr int kSpectrumHighHz = 1700;
 constexpr int kSpectrumFftSize = 8192; // ~1.5 Hz/bin at the 12 kHz Rx rate
 constexpr int kTxTailMs = 200;  // margin after audio ends before unkeying/re-enabling Send
+constexpr int kDecodeStatusIdleMs = 5000; // clear the SNR/error line this long after a decode
 
 QAudioDevice findAudioDevice(const QList<QAudioDevice> &devices, const QByteArray &id,
                               const QAudioDevice &fallback)
@@ -108,6 +110,18 @@ MainWindow::MainWindow(QWidget *parent)
     // Live spectrum around the JTTY tone, from the receive audio.
     m_spectrumWidget = new SpectrumWidget(kSpectrumLowHz, kSpectrumHighHz, central);
     rootLayout->addWidget(m_spectrumWidget, 0);
+
+    // SNR / error count of the most recent decode, cleared a while after
+    // decoding goes quiet (see m_decodeStatusClearTimer).
+    m_decodeStatusLabel = new QLabel(central);
+    m_decodeStatusLabel->setStyleSheet(
+        QStringLiteral("color: #6e6e73; font-size: 11px; padding: 2px 8px;"));
+    rootLayout->addWidget(m_decodeStatusLabel, 0);
+
+    m_decodeStatusClearTimer = new QTimer(this);
+    m_decodeStatusClearTimer->setSingleShot(true);
+    m_decodeStatusClearTimer->setInterval(kDecodeStatusIdleMs);
+    connect(m_decodeStatusClearTimer, &QTimer::timeout, m_decodeStatusLabel, &QLabel::clear);
 
     // Scrolling message history.
     m_scrollArea = new QScrollArea(central);
@@ -261,9 +275,13 @@ void MainWindow::sendMessage()
 }
 
 void MainWindow::onJttyMessageUpdated(qint64 messageId, QString text, float frequencyHz,
-                                       bool complete)
+                                       float snrDb, int errorCount, bool complete)
 {
     Q_UNUSED(frequencyHz);
+
+    m_decodeStatusLabel->setText(
+        tr("SNR: %1 dB   Errors: %2").arg(qRound(snrDb)).arg(errorCount));
+    m_decodeStatusClearTimer->start();
 
     auto pending = m_pendingReceivedBubbles.find(messageId);
     if (pending != m_pendingReceivedBubbles.end()) {

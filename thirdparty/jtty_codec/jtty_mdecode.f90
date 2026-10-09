@@ -15,6 +15,7 @@ module jtty_mdec
      real :: xdt   = 0.0              !Synced DT (0 to 0.5 s)
      real :: tsync = 0.0              !Time of sync from istart=1
      real :: snrdb = 0.0              !SNR of decoded frame
+     integer :: nsymerrs = 0          !Channel symbols that disagreed with the error-corrected codeword
      character(len=80) :: decoded = ''
      logical :: trailing_sep = .false. !decoded ends with an implicit separator column
      logical :: is_last_frame = .false. !this frame had the "last frame of message" bit set
@@ -28,6 +29,8 @@ module jtty_mdec
      integer :: k = 0
      character(len=80) :: decoded = ''
      logical :: trailing_sep = .false.
+     real :: snrdb = 0.0              !SNR of the most recently decoded frame
+     integer :: nsymerrs = 0          !Symbol errors in the most recently decoded frame
   end type message_assembly
 
   type :: frame_fingerprint
@@ -41,6 +44,8 @@ module jtty_mdec
      real :: start_tsync = 0.0
      character(len=80) :: decoded = ''
      logical :: complete = .false.
+     real :: snrdb = 0.0
+     integer :: nsymerrs = 0
   end type message_update
 
   integer, parameter        :: MAX_DECODES = 100
@@ -295,6 +300,8 @@ contains
             pending_updates(index)%f1=message%f1
             pending_updates(index)%decoded=message%decoded
             pending_updates(index)%complete=complete
+            pending_updates(index)%snrdb=message%snrdb
+            pending_updates(index)%nsymerrs=message%nsymerrs
             return
          endif
       enddo
@@ -320,6 +327,8 @@ contains
       pending_updates(index)%start_tsync=message%start_tsync
       pending_updates(index)%decoded=message%decoded
       pending_updates(index)%complete=complete
+      pending_updates(index)%snrdb=message%snrdb
+      pending_updates(index)%nsymerrs=message%nsymerrs
   end subroutine queue_message_update
 
   subroutine remove_active_message(index)
@@ -349,6 +358,8 @@ contains
            message%decoded='~'//trim(message%decoded)
       message%k=len_trim(message%decoded)
       message%trailing_sep=candidate%trailing_sep
+      message%snrdb=candidate%snrdb
+      message%nsymerrs=candidate%nsymerrs
 
       next_message_id=next_message_id+1_int64
       call queue_message_update(message,candidate%is_last_frame)
@@ -397,6 +408,8 @@ contains
       active_messages(index)%trailing_sep=candidate%trailing_sep
       active_messages(index)%f1=candidate%f1
       active_messages(index)%tsync=candidate%tsync
+      active_messages(index)%snrdb=candidate%snrdb
+      active_messages(index)%nsymerrs=candidate%nsymerrs
       call queue_message_update(active_messages(index),candidate%is_last_frame)
       message=active_messages(index)
       if(candidate%is_last_frame) call remove_active_message(index)
@@ -1066,6 +1079,7 @@ contains
          snrdb=db(pt/pn)
          cand(ncand)%snrdb=snrdb
       endif
+      cand(ncand)%nsymerrs=nsymerrs
       cand(ncand)%tsync=(istart-1)/12000.0 + cand(ncand)%xdt
       decoded_ok=.true.
 

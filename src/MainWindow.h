@@ -6,9 +6,11 @@
 
 #include <cstdint>
 
+class QLabel;
 class QLineEdit;
 class QPushButton;
 class QScrollArea;
+class QTimer;
 class QVBoxLayout;
 class QAudioSource;
 class QAudioSink;
@@ -43,7 +45,8 @@ protected:
 private slots:
     void sendMessage();
     void openSettingsDialog();
-    void onJttyMessageUpdated(qint64 messageId, QString text, float frequencyHz, bool complete);
+    void onJttyMessageUpdated(qint64 messageId, QString text, float frequencyHz, float snrDb,
+                               int errorCount, bool complete);
 
 private:
     void createMenuBar();
@@ -71,6 +74,8 @@ private:
 
     SpectrumWidget *m_spectrumWidget;
     AudioSpectrum *m_audioSpectrum;
+    QLabel *m_decodeStatusLabel;
+    QTimer *m_decodeStatusClearTimer;
 
     bool m_pendingScrollToBottom = false;
 

@@ -54,7 +54,8 @@ subroutine rjtty_core(iwave,kz,nsps,nfa,nfb,f0,ftol,istart0,istop)
 999 return
 end subroutine rjtty_core
 
-subroutine jtty_get_updates(text_blocks,message_ids,frequencies,start_tsync,eom,count)
+subroutine jtty_get_updates(text_blocks,message_ids,frequencies,snrs,nerrors, &
+     start_tsync,eom,count)
 
   use iso_fortran_env, only: int64
   use jtty_mdec
@@ -63,6 +64,8 @@ subroutine jtty_get_updates(text_blocks,message_ids,frequencies,start_tsync,eom,
   character(len=BATCH_SIZE*MESSAGE_LENGTH), intent(out) :: text_blocks
   integer(int64), intent(out)   :: message_ids(BATCH_SIZE)
   real, intent(out)             :: frequencies(BATCH_SIZE)
+  real, intent(out)             :: snrs(BATCH_SIZE)
+  integer, intent(out)          :: nerrors(BATCH_SIZE)
   real, intent(out)             :: start_tsync(BATCH_SIZE)
   logical*1, intent(out)        :: eom(BATCH_SIZE)
   integer, intent(out)          :: count
@@ -72,6 +75,8 @@ subroutine jtty_get_updates(text_blocks,message_ids,frequencies,start_tsync,eom,
   text_blocks=''
   message_ids=0_int64
   frequencies=0.0
+  snrs=0.0
+  nerrors=0
   start_tsync=0.0
   eom=.false.
   count=min(npending,BATCH_SIZE)
@@ -83,6 +88,8 @@ subroutine jtty_get_updates(text_blocks,message_ids,frequencies,start_tsync,eom,
      text_blocks(offset+1:offset+MESSAGE_LENGTH)=msg
      message_ids(i)=pending_updates(index)%message_id
      frequencies(i)=pending_updates(index)%f1
+     snrs(i)=pending_updates(index)%snrdb
+     nerrors(i)=pending_updates(index)%nsymerrs
      start_tsync(i)=pending_updates(index)%start_tsync
      eom(i)=pending_updates(index)%complete
   enddo
