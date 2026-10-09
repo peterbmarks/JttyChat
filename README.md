@@ -100,3 +100,11 @@ JttyChat also depends on:
 - [Qt6](https://www.qt.io/) — application framework and UI.
 - [Hamlib](https://hamlib.github.io/) — transceiver (CAT/PTT) control.
 - [FFTW](https://www.fftw.org/) — used internally by the JTTY codec.
+
+# Testing
+
+I use a HackRF recording which I play back like this
+
+```sh
+hackrf_transfer -t jtty_capture.iq8 -f 7090000 -x 47 -R
+```
