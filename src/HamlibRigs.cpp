@@ -5,6 +5,8 @@
 #include <algorithm>
 #include <cstring>
 
+#include <dlfcn.h>
+
 namespace {
 
 int collectRig(const struct rig_caps *caps, rig_ptr_t data)
@@ -71,6 +73,19 @@ const QList<RigInfo> &hamlibAvailableRigs()
 {
     static const QList<RigInfo> rigs = loadRigs();
     return rigs;
+}
+
+QString hamlibVersionString()
+{
+    return QString::fromUtf8(hamlib_version2);
+}
+
+QString hamlibLibraryPath()
+{
+    Dl_info info;
+    if (dladdr(reinterpret_cast<void *>(&rig_init), &info) && info.dli_fname)
+        return QString::fromUtf8(info.dli_fname);
+    return QStringLiteral("(unknown)");
 }
 
 RigConnectionResult connectAndQueryRig(int model, const QString &port, const QString &baudRate)

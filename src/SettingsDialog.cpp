@@ -66,6 +66,13 @@ SettingsDialog::SettingsDialog(QWidget *parent)
     auto *transceiverGroup = new QGroupBox(QStringLiteral("Transceiver"), this);
     auto *transceiverForm = new QFormLayout(transceiverGroup);
 
+    m_hamlibVersionLabel = new QLabel(hamlibVersionString(), transceiverGroup);
+    transceiverForm->addRow(QStringLiteral("Hamlib Version:"), m_hamlibVersionLabel);
+
+    m_hamlibLibraryPathLabel = new QLabel(hamlibLibraryPath(), transceiverGroup);
+    m_hamlibLibraryPathLabel->setWordWrap(true);
+    transceiverForm->addRow(QStringLiteral("Library Path:"), m_hamlibLibraryPathLabel);
+
     m_audioInputCombo = new QComboBox(transceiverGroup);
     transceiverForm->addRow(QStringLiteral("Audio Input:"), m_audioInputCombo);
 

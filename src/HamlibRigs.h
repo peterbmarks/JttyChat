@@ -16,6 +16,14 @@ struct RigInfo
 // the result for the lifetime of the process.
 const QList<RigInfo> &hamlibAvailableRigs();
 
+// Hamlib's own version string (e.g. "Hamlib 4.6.5").
+QString hamlibVersionString();
+
+// Filesystem path of the libhamlib shared object actually loaded at
+// runtime, as resolved by the dynamic linker (distinct from the headers
+// it was built against, if more than one Hamlib is installed).
+QString hamlibLibraryPath();
+
 struct RigConnectionResult
 {
     bool success = false;

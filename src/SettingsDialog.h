@@ -39,4 +39,6 @@ private:
     QComboBox *m_rigBaudRateCombo;
     QPushButton *m_connectButton;
     QLabel *m_rigStatusLabel;
+    QLabel *m_hamlibVersionLabel;
+    QLabel *m_hamlibLibraryPathLabel;
 };
