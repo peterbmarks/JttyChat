@@ -18,7 +18,11 @@ received from other stations appear as incoming chat bubbles.
 - A Settings window (File → Settings…) for your callsign, audio input/output
   device selection, and a Transceiver section for Hamlib rig control (rig
   model, serial port, baud rate, and a Connect button to test the link and
-  show the rig's current frequency and mode).
+  show the rig's current frequency and mode). This section also shows the
+  version and on-disk path of the Hamlib library actually loaded at runtime.
+- Hamlib Log (File → Hamlib Log): a live window showing Hamlib's internal
+  rig-communication trace (CAT commands/responses and open/close activity),
+  with errors highlighted — useful for diagnosing rig connection problems.
 - Captitalise text option to try to do sentence capitalisation
 - Append callsign adds your callsign to the end of messages
 - Macro buttons. Right click to set up. Click to insert text.
@@ -106,8 +110,21 @@ JttyChat also depends on:
 
 # Testing
 
-I use a HackRF recording which I play back like this
+To test reception I use a HackRF recording which I play back like this
 
 ```sh
 hackrf_transfer -t jtty_capture.iq8 -f 7090000 -x 47 -R
 ```
+
+# Uploading AppImage
+
+I distribute the app as an AppImage which bundles all the required
+libraries. This includes QT6 so it's rather large.
+
+```sh
+./scripts/built_appimage.sh
+tar czf dist/JttyChat-x86_64.AppImage.tar.gz dist/JttyChat-x86_64.AppImage
+aws s3 cp dist/JttyChat-x86_64.AppImage.tar.gz s3://vk3tpm-150585202763-ap-southeast-2-an/JttyChat/ --acl public-read
+```
+
+Obviously this is a note to myself!
