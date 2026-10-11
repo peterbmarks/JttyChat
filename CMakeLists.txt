@@ -34,6 +34,10 @@ add_executable(JttyChat
     src/SettingsDialog.cpp
     src/HamlibRigs.h
     src/HamlibRigs.cpp
+    src/HamlibLog.h
+    src/HamlibLog.cpp
+    src/HamlibLogWindow.h
+    src/HamlibLogWindow.cpp
     src/JttyCodec.h
     src/JttyCodec.cpp
     src/JttyDecoder.h

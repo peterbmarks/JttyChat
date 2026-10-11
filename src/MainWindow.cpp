@@ -5,6 +5,7 @@
 #include "HamlibRigs.h"
 #include "JttyCodec.h"
 #include "JttyDecoder.h"
+#include "HamlibLogWindow.h"
 #include "MacroEditDialog.h"
 #include "SettingsDialog.h"
 #include "SpectrumWidget.h"
@@ -266,6 +267,9 @@ void MainWindow::createMenuBar()
     settingsAction->setShortcut(QKeySequence::Preferences);
     connect(settingsAction, &QAction::triggered, this, &MainWindow::openSettingsDialog);
 
+    QAction *hamlibLogAction = fileMenu->addAction(QStringLiteral("Hamlib &Log"));
+    connect(hamlibLogAction, &QAction::triggered, this, &MainWindow::openHamlibLogWindow);
+
     fileMenu->addSeparator();
 
     QAction *quitAction = fileMenu->addAction(QStringLiteral("&Quit"));
@@ -292,6 +296,16 @@ void MainWindow::openSettingsDialog()
         // whatever is now configured.
         startJttyReceiver();
     }
+}
+
+void MainWindow::openHamlibLogWindow()
+{
+    if (!m_hamlibLogWindow)
+        m_hamlibLogWindow = new HamlibLogWindow(this);
+
+    m_hamlibLogWindow->show();
+    m_hamlibLogWindow->raise();
+    m_hamlibLogWindow->activateWindow();
 }
 
 void MainWindow::sendMessage()

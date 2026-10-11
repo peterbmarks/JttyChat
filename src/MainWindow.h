@@ -21,6 +21,7 @@ class JttyDecoder;
 class SpectrumWidget;
 class AudioSpectrum;
 class ChatBubble;
+class HamlibLogWindow;
 
 // Top-level window: a scrolling column of speech-bubble messages above
 // a text field + Send button, in the style of a simple iMessage-like client.
@@ -47,6 +48,7 @@ protected:
 private slots:
     void sendMessage();
     void openSettingsDialog();
+    void openHamlibLogWindow();
     void onJttyMessageUpdated(qint64 messageId, QString text, float frequencyHz, float snrDb,
                                int errorCount, bool complete);
 
@@ -94,6 +96,11 @@ private:
     // so later frames of the same message update the existing bubble
     // instead of creating a new one. Erased once a message completes.
     QHash<qint64, QPointer<ChatBubble>> m_pendingReceivedBubbles;
+
+    // Lazily created by the File > Hamlib Log menu item; stays alive (just
+    // hidden) when closed, so the log keeps accumulating and reopening it
+    // shows the full history again. See HamlibLogWindow.
+    QPointer<HamlibLogWindow> m_hamlibLogWindow;
 
     // Macro button row above the input bar: left-click inserts macroTexts[i]
     // into the message field, right-click edits that button's title/text.

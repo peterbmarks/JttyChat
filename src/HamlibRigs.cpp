@@ -20,10 +20,13 @@ int collectRig(const struct rig_caps *caps, rig_ptr_t data)
 
 QList<RigInfo> loadRigs()
 {
-    // Hamlib logs a line per backend as it loads them; we don't want that
-    // on stdout/stderr every time the app starts.
+    // Hamlib logs a line per backend as it loads them; mute that flood,
+    // then restore the trace level HamlibLog::install() set at startup so
+    // actual rig sessions afterwards are still captured in the Hamlib Log
+    // window.
     rig_set_debug(RIG_DEBUG_NONE);
     rig_load_all_backends();
+    rig_set_debug(RIG_DEBUG_TRACE);
 
     QList<RigInfo> rigs;
     rig_list_foreach(collectRig, &rigs);
