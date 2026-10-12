@@ -30,20 +30,32 @@ struct RigConnectionResult
     QString message; // "<freq> MHz  <mode>" on success, an error description otherwise
 };
 
-// Opens the given rig model on the given port (a serial device path, or a
-// "host:port" address for the "Hamlib NET rigctl" model), reads its current
-// frequency and mode, then closes it again. baudRate is one of the strings
-// offered by the Settings dialog's baud rate combo box ("Default" to leave
-// it at the rig backend's default). Blocks for as long as Hamlib takes to
-// open the port and respond (or time out) - call this off the UI thread.
-RigConnectionResult connectAndQueryRig(int model, const QString &port, const QString &baudRate);
+// Everything needed to open a rig. port is a serial device path, or a
+// "host:port" address for the "Hamlib NET rigctl" model. baudRate,
+// dataBits, stopBits and handshake are each one of the strings offered by
+// the matching Settings dialog combo box - "Default" leaves that aspect of
+// the connection at the rig backend's own default instead of overriding it.
+struct RigConnectionParams
+{
+    int model = 0;
+    QString port;
+    QString baudRate;
+    QString dataBits;
+    QString stopBits;
+    QString handshake;
+};
+
+// Opens the rig, reads its current frequency and mode, then closes it
+// again. Blocks for as long as Hamlib takes to open the port and respond
+// (or time out) - call this off the UI thread.
+RigConnectionResult connectAndQueryRig(const RigConnectionParams &params);
 
 // Opens the rig just long enough to key or unkey PTT, then closes it again.
 // Meant to run off the UI thread (serial open can block briefly). Returns an
 // error message, or an empty string on success.
-QString setRigPtt(int model, const QString &port, const QString &baudRate, bool on);
+QString setRigPtt(const RigConnectionParams &params, bool on);
 
 // Opens the rig just long enough to set its current VFO frequency (in Hz),
 // then closes it again. Meant to run off the UI thread. Returns an error
 // message, or an empty string on success.
-QString setRigFrequency(int model, const QString &port, const QString &baudRate, double freqHz);
+QString setRigFrequency(const RigConnectionParams &params, double freqHz);

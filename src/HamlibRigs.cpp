@@ -37,18 +37,34 @@ QList<RigInfo> loadRigs()
     return rigs;
 }
 
-// Initializes and opens a rig, applying the given port/baud. On failure,
-// returns null and fills *errorMessage; the caller owns the returned RIG on
-// success and must rig_close()+rig_cleanup() it.
-RIG *openRig(int model, const QString &port, const QString &baudRate, QString *errorMessage)
+// Parses one of the Settings dialog's "Default" or explicit-value combo box
+// choices to the enum value handshakeFor() needs, or does nothing if left
+// on "Default".
+enum serial_handshake_e handshakeFor(const QString &handshake, bool *ok)
 {
-    RIG *rig = rig_init(model);
+    *ok = true;
+    if (handshake == QStringLiteral("None"))
+        return RIG_HANDSHAKE_NONE;
+    if (handshake == QStringLiteral("XON/XOFF"))
+        return RIG_HANDSHAKE_XONXOFF;
+    if (handshake == QStringLiteral("Hardware"))
+        return RIG_HANDSHAKE_HARDWARE;
+    *ok = false;
+    return RIG_HANDSHAKE_NONE;
+}
+
+// Initializes and opens a rig, applying the given connection parameters. On
+// failure, returns null and fills *errorMessage; the caller owns the
+// returned RIG on success and must rig_close()+rig_cleanup() it.
+RIG *openRig(const RigConnectionParams &params, QString *errorMessage)
+{
+    RIG *rig = rig_init(params.model);
     if (!rig) {
         *errorMessage = QStringLiteral("Could not initialize this rig model.");
         return nullptr;
     }
 
-    const QByteArray portBytes = port.toUtf8();
+    const QByteArray portBytes = params.port.toUtf8();
     if (!portBytes.isEmpty()) {
         std::strncpy(rig->state.rigport.pathname, portBytes.constData(),
                      sizeof(rig->state.rigport.pathname) - 1);
@@ -56,9 +72,24 @@ RIG *openRig(int model, const QString &port, const QString &baudRate, QString *e
     }
 
     bool baudOk = false;
-    const int baud = baudRate.toInt(&baudOk);
+    const int baud = params.baudRate.toInt(&baudOk);
     if (baudOk)
         rig->state.rigport.parm.serial.rate = baud;
+
+    bool dataBitsOk = false;
+    const int dataBits = params.dataBits.toInt(&dataBitsOk);
+    if (dataBitsOk)
+        rig->state.rigport.parm.serial.data_bits = dataBits;
+
+    bool stopBitsOk = false;
+    const int stopBits = params.stopBits.toInt(&stopBitsOk);
+    if (stopBitsOk)
+        rig->state.rigport.parm.serial.stop_bits = stopBits;
+
+    bool handshakeOk = false;
+    const enum serial_handshake_e handshake = handshakeFor(params.handshake, &handshakeOk);
+    if (handshakeOk)
+        rig->state.rigport.parm.serial.handshake = handshake;
 
     const int retcode = rig_open(rig);
     if (retcode != RIG_OK) {
@@ -91,11 +122,11 @@ QString hamlibLibraryPath()
     return QStringLiteral("(unknown)");
 }
 
-RigConnectionResult connectAndQueryRig(int model, const QString &port, const QString &baudRate)
+RigConnectionResult connectAndQueryRig(const RigConnectionParams &params)
 {
     RigConnectionResult result;
 
-    RIG *rig = openRig(model, port, baudRate, &result.message);
+    RIG *rig = openRig(params, &result.message);
     if (!rig)
         return result;
 
@@ -128,10 +159,10 @@ RigConnectionResult connectAndQueryRig(int model, const QString &port, const QSt
     return result;
 }
 
-QString setRigPtt(int model, const QString &port, const QString &baudRate, bool on)
+QString setRigPtt(const RigConnectionParams &params, bool on)
 {
     QString errorMessage;
-    RIG *rig = openRig(model, port, baudRate, &errorMessage);
+    RIG *rig = openRig(params, &errorMessage);
     if (!rig)
         return errorMessage;
 
@@ -147,10 +178,10 @@ QString setRigPtt(int model, const QString &port, const QString &baudRate, bool 
     return {};
 }
 
-QString setRigFrequency(int model, const QString &port, const QString &baudRate, double freqHz)
+QString setRigFrequency(const RigConnectionParams &params, double freqHz)
 {
     QString errorMessage;
-    RIG *rig = openRig(model, port, baudRate, &errorMessage);
+    RIG *rig = openRig(params, &errorMessage);
     if (!rig)
         return errorMessage;
 

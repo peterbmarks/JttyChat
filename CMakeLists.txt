@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(JttyChat VERSION 1.1.0 LANGUAGES CXX Fortran)
+project(JttyChat VERSION 1.2.0 LANGUAGES CXX Fortran)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

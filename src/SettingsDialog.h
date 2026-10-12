@@ -28,6 +28,9 @@ private:
     void populateRigModels();
     void populateRigPorts();
     void populateRigBaudRates();
+    void populateRigDataBits();
+    void populateRigStopBits();
+    void populateRigHandshakes();
 
     QLineEdit *m_callsignEdit;
     QCheckBox *m_appendCallsignCheck;
@@ -37,6 +40,9 @@ private:
     QComboBox *m_rigModelCombo;
     QComboBox *m_rigPortCombo;
     QComboBox *m_rigBaudRateCombo;
+    QComboBox *m_rigDataBitsCombo;
+    QComboBox *m_rigStopBitsCombo;
+    QComboBox *m_rigHandshakeCombo;
     QPushButton *m_connectButton;
     QLabel *m_rigStatusLabel;
     QLabel *m_hamlibVersionLabel;

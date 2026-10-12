@@ -60,9 +60,7 @@ QAudioDevice findAudioDevice(const QList<QAudioDevice> &devices, const QByteArra
 struct RigTxSettings
 {
     bool configured = false;
-    int model = 0;
-    QString port;
-    QString baudRate;
+    RigConnectionParams params;
 };
 
 RigTxSettings loadRigTxSettings()
@@ -71,11 +69,14 @@ RigTxSettings loadRigTxSettings()
     settings.beginGroup(SettingsKeys::transceiverGroup);
     RigTxSettings rig;
     const bool haveModel = settings.contains(SettingsKeys::rigModel);
-    rig.model = settings.value(SettingsKeys::rigModel).toInt();
-    rig.port = settings.value(SettingsKeys::rigPort).toString().trimmed();
-    rig.baudRate = settings.value(SettingsKeys::rigBaudRate).toString();
+    rig.params.model = settings.value(SettingsKeys::rigModel).toInt();
+    rig.params.port = settings.value(SettingsKeys::rigPort).toString().trimmed();
+    rig.params.baudRate = settings.value(SettingsKeys::rigBaudRate).toString();
+    rig.params.dataBits = settings.value(SettingsKeys::rigDataBits).toString();
+    rig.params.stopBits = settings.value(SettingsKeys::rigStopBits).toString();
+    rig.params.handshake = settings.value(SettingsKeys::rigHandshake).toString();
     settings.endGroup();
-    rig.configured = haveModel && !rig.port.isEmpty();
+    rig.configured = haveModel && !rig.params.port.isEmpty();
     return rig;
 }
 
@@ -393,7 +394,7 @@ void MainWindow::transmitJtty(const QVector<int16_t> &samples)
 
     const RigTxSettings rig = loadRigTxSettings();
     if (rig.configured) {
-        std::thread([rig]() { setRigPtt(rig.model, rig.port, rig.baudRate, true); }).detach();
+        std::thread([rig]() { setRigPtt(rig.params, true); }).detach();
     }
 
     const int leadMs = rig.configured ? kPttLeadMs : 0;
@@ -431,7 +432,7 @@ void MainWindow::transmitJtty(const QVector<int16_t> &samples)
 
     QTimer::singleShot(totalMs, this, [this, rig]() {
         if (rig.configured) {
-            std::thread([rig]() { setRigPtt(rig.model, rig.port, rig.baudRate, false); }).detach();
+            std::thread([rig]() { setRigPtt(rig.params, false); }).detach();
         }
         m_inputField->setEnabled(true);
         m_sendButton->setEnabled(true);
@@ -449,7 +450,7 @@ void MainWindow::tuneRigToFrequency(double freqMHz)
     }
 
     std::thread([this, rig, freqMHz]() {
-        const QString error = setRigFrequency(rig.model, rig.port, rig.baudRate, freqMHz * 1.0e6);
+        const QString error = setRigFrequency(rig.params, freqMHz * 1.0e6);
         if (!error.isEmpty()) {
             QMetaObject::invokeMethod(
                 this, [this, error]() { QMessageBox::warning(this, tr("Frequency"), error); },

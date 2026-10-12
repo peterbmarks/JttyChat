@@ -13,6 +13,9 @@ constexpr auto audioOutputDeviceId = "audioOutputDeviceId";
 constexpr auto rigModel = "rigModel";
 constexpr auto rigPort = "rigPort";
 constexpr auto rigBaudRate = "rigBaudRate";
+constexpr auto rigDataBits = "rigDataBits";
+constexpr auto rigStopBits = "rigStopBits";
+constexpr auto rigHandshake = "rigHandshake";
 
 // Macro button bar: groups "macroTitle1".."macroTitle8" and
 // "macroText1".."macroText8" (see MainWindow::loadMacros/saveMacro).

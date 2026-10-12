@@ -93,6 +93,15 @@ SettingsDialog::SettingsDialog(QWidget *parent)
     m_rigBaudRateCombo = new QComboBox(transceiverGroup);
     transceiverForm->addRow(QStringLiteral("Rig Baud Rate:"), m_rigBaudRateCombo);
 
+    m_rigDataBitsCombo = new QComboBox(transceiverGroup);
+    transceiverForm->addRow(QStringLiteral("Rig Data Bits:"), m_rigDataBitsCombo);
+
+    m_rigStopBitsCombo = new QComboBox(transceiverGroup);
+    transceiverForm->addRow(QStringLiteral("Rig Stop Bits:"), m_rigStopBitsCombo);
+
+    m_rigHandshakeCombo = new QComboBox(transceiverGroup);
+    transceiverForm->addRow(QStringLiteral("Rig Handshake:"), m_rigHandshakeCombo);
+
     m_connectButton = new QPushButton(QStringLiteral("Connect"), transceiverGroup);
     transceiverForm->addRow(QString(), m_connectButton);
     connect(m_connectButton, &QPushButton::clicked, this, &SettingsDialog::connectToRig);
@@ -112,6 +121,9 @@ SettingsDialog::SettingsDialog(QWidget *parent)
     populateRigModels();
     populateRigPorts();
     populateRigBaudRates();
+    populateRigDataBits();
+    populateRigStopBits();
+    populateRigHandshakes();
     loadSettings();
 }
 
@@ -162,6 +174,30 @@ void SettingsDialog::populateRigBaudRates()
         m_rigBaudRateCombo->addItem(QString::fromLatin1(rate));
 }
 
+void SettingsDialog::populateRigDataBits()
+{
+    m_rigDataBitsCombo->clear();
+    m_rigDataBitsCombo->addItem(QStringLiteral("Default"));
+    for (const char *bits : {"7", "8"})
+        m_rigDataBitsCombo->addItem(QString::fromLatin1(bits));
+}
+
+void SettingsDialog::populateRigStopBits()
+{
+    m_rigStopBitsCombo->clear();
+    m_rigStopBitsCombo->addItem(QStringLiteral("Default"));
+    for (const char *bits : {"1", "2"})
+        m_rigStopBitsCombo->addItem(QString::fromLatin1(bits));
+}
+
+void SettingsDialog::populateRigHandshakes()
+{
+    m_rigHandshakeCombo->clear();
+    m_rigHandshakeCombo->addItem(QStringLiteral("Default"));
+    for (const char *handshake : {"None", "XON/XOFF", "Hardware"})
+        m_rigHandshakeCombo->addItem(QString::fromLatin1(handshake));
+}
+
 void SettingsDialog::loadSettings()
 {
     QSettings settings;
@@ -177,6 +213,9 @@ void SettingsDialog::loadSettings()
     const int savedRigModel = settings.value(SettingsKeys::rigModel).toInt();
     const QString savedRigPort = settings.value(SettingsKeys::rigPort).toString();
     const QString savedBaudRate = settings.value(SettingsKeys::rigBaudRate).toString();
+    const QString savedDataBits = settings.value(SettingsKeys::rigDataBits).toString();
+    const QString savedStopBits = settings.value(SettingsKeys::rigStopBits).toString();
+    const QString savedHandshake = settings.value(SettingsKeys::rigHandshake).toString();
     settings.endGroup();
 
     selectDevice(m_audioInputCombo, savedInputId, QMediaDevices::defaultAudioInput());
@@ -189,6 +228,15 @@ void SettingsDialog::loadSettings()
 
     const int baudIndex = m_rigBaudRateCombo->findText(savedBaudRate);
     m_rigBaudRateCombo->setCurrentIndex(baudIndex < 0 ? 0 : baudIndex);
+
+    const int dataBitsIndex = m_rigDataBitsCombo->findText(savedDataBits);
+    m_rigDataBitsCombo->setCurrentIndex(dataBitsIndex < 0 ? 0 : dataBitsIndex);
+
+    const int stopBitsIndex = m_rigStopBitsCombo->findText(savedStopBits);
+    m_rigStopBitsCombo->setCurrentIndex(stopBitsIndex < 0 ? 0 : stopBitsIndex);
+
+    const int handshakeIndex = m_rigHandshakeCombo->findText(savedHandshake);
+    m_rigHandshakeCombo->setCurrentIndex(handshakeIndex < 0 ? 0 : handshakeIndex);
 }
 
 void SettingsDialog::connectToRig()
@@ -199,9 +247,13 @@ void SettingsDialog::connectToRig()
         return;
     }
 
-    const int model = m_rigModelCombo->currentData().toInt();
-    const QString port = m_rigPortCombo->currentText().trimmed();
-    const QString baudRate = m_rigBaudRateCombo->currentText();
+    RigConnectionParams params;
+    params.model = m_rigModelCombo->currentData().toInt();
+    params.port = m_rigPortCombo->currentText().trimmed();
+    params.baudRate = m_rigBaudRateCombo->currentText();
+    params.dataBits = m_rigDataBitsCombo->currentText();
+    params.stopBits = m_rigStopBitsCombo->currentText();
+    params.handshake = m_rigHandshakeCombo->currentText();
 
     m_connectButton->setEnabled(false);
     m_rigStatusLabel->setStyleSheet(QString());
@@ -211,8 +263,8 @@ void SettingsDialog::connectToRig()
     // before giving up), so do it off the UI thread and post the result
     // back. Using `this` as the invokeMethod context means the queued call
     // is silently dropped if the dialog is closed before it runs.
-    std::thread([this, model, port, baudRate]() {
-        const RigConnectionResult result = connectAndQueryRig(model, port, baudRate);
+    std::thread([this, params]() {
+        const RigConnectionResult result = connectAndQueryRig(params);
         QMetaObject::invokeMethod(this, [this, result]() {
             m_rigStatusLabel->setStyleSheet(result.success ? QString() : QStringLiteral("color: #c0392b;"));
             m_rigStatusLabel->setText(result.message);
@@ -235,6 +287,9 @@ void SettingsDialog::save()
     settings.setValue(SettingsKeys::rigModel, m_rigModelCombo->currentData().toInt());
     settings.setValue(SettingsKeys::rigPort, m_rigPortCombo->currentText().trimmed());
     settings.setValue(SettingsKeys::rigBaudRate, m_rigBaudRateCombo->currentText());
+    settings.setValue(SettingsKeys::rigDataBits, m_rigDataBitsCombo->currentText());
+    settings.setValue(SettingsKeys::rigStopBits, m_rigStopBitsCombo->currentText());
+    settings.setValue(SettingsKeys::rigHandshake, m_rigHandshakeCombo->currentText());
     settings.endGroup();
 
     accept();
