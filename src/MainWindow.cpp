@@ -10,6 +10,7 @@
 #include "SettingsDialog.h"
 #include "SpectrumWidget.h"
 #include "TextCapitalization.h"
+#include "Version.h"
 
 #include <QAction>
 #include <QApplication>
@@ -272,6 +273,12 @@ void MainWindow::createMenuBar()
 
     fileMenu->addSeparator();
 
+    QAction *aboutAction = fileMenu->addAction(QStringLiteral("&About JttyChat..."));
+    aboutAction->setMenuRole(QAction::AboutRole);
+    connect(aboutAction, &QAction::triggered, this, &MainWindow::openAboutDialog);
+
+    fileMenu->addSeparator();
+
     QAction *quitAction = fileMenu->addAction(QStringLiteral("&Quit"));
     quitAction->setMenuRole(QAction::QuitRole);
     quitAction->setShortcut(QKeySequence::Quit);
@@ -306,6 +313,24 @@ void MainWindow::openHamlibLogWindow()
     m_hamlibLogWindow->show();
     m_hamlibLogWindow->raise();
     m_hamlibLogWindow->activateWindow();
+}
+
+void MainWindow::openAboutDialog()
+{
+    QMessageBox::about(this, QStringLiteral("About JttyChat"),
+        QStringLiteral(
+            "<h3>JttyChat %1</h3>"
+            "<p>A desktop chat client for the JTTY amateur radio digital mode.</p>"
+            "<p>Created by Peter Marks, VK3TPM.</p>"
+            "<p>The JTTY encode/decode engine is copied from a fork of "
+            "<a href=\"https://wsjtx.github.io/wsjtx/\">WSJT-X</a> (wsjtx-3.2.0-rc1), "
+            "developed by the WSJT Development Team: Joe Taylor, K1JT; Bill Somerville, "
+            "G4WJS; Steve Franke, K9AN; Nico Palermo, IV3NWV; Uwe Risse, DG2YCB; Brian "
+            "Moran, N9ADG; Roger Rehr, W3SZ; John Nelson, G4KLA; Charlie Suckling, DL3WDG; "
+            "Terrell Deppe, KJ5HST; and David Christle, KD0BTO, with acknowledged "
+            "contributions from many others (see README.md for the full list). Licensed "
+            "under the GNU General Public License v3.</p>")
+            .arg(QString::fromLatin1(AppVersion::string)));
 }
 
 void MainWindow::sendMessage()

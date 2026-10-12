@@ -49,6 +49,7 @@ private slots:
     void sendMessage();
     void openSettingsDialog();
     void openHamlibLogWindow();
+    void openAboutDialog();
     void onJttyMessageUpdated(qint64 messageId, QString text, float frequencyHz, float snrDb,
                                int errorCount, bool complete);
 

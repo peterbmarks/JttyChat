@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(JttyChat VERSION 1.0.0 LANGUAGES CXX Fortran)
+project(JttyChat VERSION 1.1.0 LANGUAGES CXX Fortran)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -14,6 +14,8 @@ find_package(PkgConfig REQUIRED)
 pkg_check_modules(HAMLIB REQUIRED IMPORTED_TARGET hamlib)
 pkg_check_modules(FFTW3F REQUIRED IMPORTED_TARGET fftw3f)
 find_package(OpenMP REQUIRED COMPONENTS Fortran)
+
+configure_file(src/Version.h.in ${CMAKE_BINARY_DIR}/generated/Version.h @ONLY)
 
 # JTTY mode codec (encode/decode DSP), copied from wsjtx-3.2.0-rc1's lib/jtty
 # and lib/ (see thirdparty/jtty_codec/NOTICE.txt). GPLv3, same as the rest of
@@ -51,6 +53,8 @@ add_executable(JttyChat
     src/MacroEditDialog.h
     src/MacroEditDialog.cpp
 )
+
+target_include_directories(JttyChat PRIVATE ${CMAKE_BINARY_DIR}/generated)
 
 target_link_libraries(JttyChat PRIVATE Qt6::Widgets Qt6::Multimedia PkgConfig::HAMLIB
     jtty_codec PkgConfig::FFTW3F OpenMP::OpenMP_Fortran)
