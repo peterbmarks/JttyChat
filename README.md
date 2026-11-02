@@ -81,7 +81,7 @@ run (cached under `tools/`) to bundle everything into
 
 The JTTY encode/decode engine in `thirdparty/jtty_codec/` is copied,
 unmodified, from the JTTY mode implementation in a fork of
-[WSJT-X](https://wsjtx.github.io/wsjtx/) (`wsjtx-3.2.0-rc1`). JTTY is a
+[WSJT-X](https://wsjtx.github.io/wsjtx/) (`wsjtx-3.3.0-beta5`). JTTY is a
 GFSK-based weak-signal mode designed for fast, RTTY-style contest exchanges
 and keyboard-to-keyboard contacts; see `thirdparty/jtty_codec/NOTICE.txt` for
 the specific entry points this project calls.

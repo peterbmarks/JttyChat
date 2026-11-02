@@ -6,7 +6,7 @@
 #include <cstdint>
 
 // Thin C++ wrapper around the JTTY mode codec (thirdparty/jtty_codec, copied
-// from wsjtx-3.2.0-rc1's lib/jtty). See lib/jtty/jtty_design.md in that
+// from wsjtx-3.3.0-beta5's lib/jtty). See lib/jtty/jtty_design.md in that
 // source tree for the wire format this implements.
 namespace Jtty {
 
@@ -17,8 +17,9 @@ constexpr int rxSamplesPerSymbol = 384;
 constexpr int txSampleRate = 48000;
 constexpr int txSamplesPerSymbol = 4 * rxSamplesPerSymbol;
 constexpr int symbolsPerFrame = 59;
+constexpr int frameBits = 34;
 constexpr int maxMessageLength = 80;
-constexpr int maxFrames = 16; // genjtty's MAX_TONES = 59*16
+constexpr int maxFrames = 16; // MAX_FRAMES in jtty_mod.f90
 
 // Default audio tone (Hz) used for both transmit and the decoder's primary
 // search channel, matching WSJT-X's own JTTY defaults (RxFreqSpinBox_2 /

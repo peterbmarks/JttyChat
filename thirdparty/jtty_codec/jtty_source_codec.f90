@@ -42,7 +42,7 @@ module jtty_source_codec
   integer, parameter :: JTTY_PAIR_ZONE_LOC3=0,JTTY_PAIR_CLASS_SECTION=1
   integer, parameter :: JTTY_MISC_CONTROL=0,JTTY_MISC_GRID4=1
   integer(c_int), parameter :: JTTY_ENCODE_OK=0,JTTY_ENCODE_INVALID_DESCRIPTOR=1
-  integer(c_int), parameter :: JTTY_ENCODE_UNKNOWN_SECTION=2
+  integer(c_int), parameter :: JTTY_ENCODE_UNKNOWN_SECTION=2,JTTY_ENCODE_UNENCODABLE=3
   integer, parameter :: JTTY_CONTROL_AGN=0,JTTY_CONTROL_CALL=1,JTTY_CONTROL_AGN_CALL=2
   integer, parameter :: JTTY_CONTROL_NR=3,JTTY_CONTROL_AGN_NR=4,JTTY_CONTROL_EXCH=5
   integer, parameter :: JTTY_CONTROL_STATE=6,JTTY_CONTROL_SECTION=7,JTTY_CONTROL_ZONE=8
@@ -388,18 +388,22 @@ type(jtty_source_atom) function jtty_text5_atom(text) result(atom)
   if(n.gt.0) atom%text(1:n)=text(1:n)
 end function jtty_text5_atom
 
-subroutine pack_jtty_atoms(atoms,natoms,frames,nframes,valid)
+subroutine pack_jtty_atoms(atoms,natoms,frames,nframes,valid,is_final)
   type(jtty_source_atom), intent(in) :: atoms(:)
   integer, intent(in) :: natoms
   character(len=34), intent(out) :: frames(:)
   integer, intent(out) :: nframes
   logical, intent(out) :: valid
+  integer, intent(in), optional :: is_final  !0/1; absent means final (existing behavior)
   integer :: i
+  logical :: final_ok
   frames=''; nframes=0
   valid=natoms.ge.1 .and. natoms.le.16 .and. natoms.le.size(atoms) .and. natoms.le.size(frames)
   if(.not.valid) return
+  final_ok=.true.
+  if(present(is_final)) final_ok=is_final.ne.0
   do i=1,natoms
-     call pack_jtty_atom(atoms(i),frames(i),i.eq.natoms,valid)
+     call pack_jtty_atom(atoms(i),frames(i),i.eq.natoms .and. final_ok,valid)
      if(.not.valid) then; frames=''; return; endif
   enddo
   nframes=natoms

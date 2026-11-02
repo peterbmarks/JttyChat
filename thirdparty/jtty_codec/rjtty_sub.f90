@@ -56,6 +56,8 @@ end subroutine rjtty_core
 
 subroutine jtty_get_updates(text_blocks,message_ids,frequencies,snrs,nerrors, &
      start_tsync,eom,count)
+  ! JttyChat: reports the latest frame's SNR (real dB) and symbol-error count
+  ! per update, in place of upstream's integer first-frame snr argument.
 
   use iso_fortran_env, only: int64
   use jtty_mdec
@@ -75,10 +77,10 @@ subroutine jtty_get_updates(text_blocks,message_ids,frequencies,snrs,nerrors, &
   text_blocks=''
   message_ids=0_int64
   frequencies=0.0
-  snrs=0.0
-  nerrors=0
   start_tsync=0.0
   eom=.false.
+  snrs=0.0
+  nerrors=0
   count=min(npending,BATCH_SIZE)
 
   do i=1,count
@@ -88,10 +90,10 @@ subroutine jtty_get_updates(text_blocks,message_ids,frequencies,snrs,nerrors, &
      text_blocks(offset+1:offset+MESSAGE_LENGTH)=msg
      message_ids(i)=pending_updates(index)%message_id
      frequencies(i)=pending_updates(index)%f1
-     snrs(i)=pending_updates(index)%snrdb
-     nerrors(i)=pending_updates(index)%nsymerrs
      start_tsync(i)=pending_updates(index)%start_tsync
      eom(i)=pending_updates(index)%complete
+     snrs(i)=pending_updates(index)%snrdb
+     nerrors(i)=pending_updates(index)%nsymerrs
   enddo
 
   ! Pending membership is the delivery guarantee; remove records only after copying them out.

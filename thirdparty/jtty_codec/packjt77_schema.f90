@@ -127,6 +127,9 @@ module packjt77_schema
        bit_field('i3',75,3,0_int64,0_int64,.false.), &
        NO_FIELD,NO_FIELD /))
 
+  ! Standard RR73 bits 59:77 encode ir=0, acknowledgment 32403, and i3=1.
+  integer, parameter :: PACK77_TYPE1_RR73_TAIL(19)=[0,1,1,1,1,1,1,0,1,0,0,1,0,0,1,1,0,0,1]
+
   type(message_schema), parameter :: PACK77_SCHEMA_TYPE1=message_schema( &
        1,0,'type 1 standard',7,(/ &
        bit_field('n28a',1,28,0_int64,268435455_int64,.false.), &
@@ -610,6 +613,36 @@ contains
        n3=0
     endif
   end subroutine decode_pack77_tag
+
+  integer function pack77_wspr_payload_type(c77,binary_checked) result(wspr_type)
+    character(len=77), intent(in) :: c77
+    logical, intent(in), optional :: binary_checked
+    type(bit_field) :: selector
+    integer :: value
+    logical :: ok
+
+    wspr_type=0
+    ok=pack77_binary_precondition(c77,binary_checked)
+    selector=PACK77_SCHEMA_WSPR_TYPE2%fields(4)
+    selector%min_value=0_int64
+    call get_int(ok,c77,selector,value)
+    if(.not.ok) return
+    if(value.eq.1) then
+       wspr_type=2
+       return
+    endif
+
+    selector=PACK77_SCHEMA_WSPR_TYPE1%fields(4)
+    selector%max_value=1_int64
+    call get_int(ok,c77,selector,value)
+    if(.not.ok) return
+    if(value.eq.0) then
+       wspr_type=1
+    else
+       ! Selector 110 belongs to this dispatch path but fails Type 3 decoding.
+       wspr_type=3
+    endif
+  end function pack77_wspr_payload_type
 
   subroutine decode_pack77_free_text(c77,fields,ok,binary_checked)
     character(len=77), intent(in) :: c77

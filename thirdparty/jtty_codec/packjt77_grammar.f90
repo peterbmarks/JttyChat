@@ -2,7 +2,7 @@ module packjt77_grammar
 
   implicit none
 
-  private :: pack77_gate_staged_call_matches
+  private :: pack77_gate_staged_call_matches,pack77_configured_type4_call_ok
 
   integer, parameter :: PACK77_NSEC=86
   integer, parameter :: PACK77_NUSCAN=171
@@ -97,6 +97,97 @@ module packjt77_grammar
      integer :: ir=0,irpt=0,iserial=0
   end type pack77_type5_source
   contains
+
+logical function pack77_exact_free_text_ok(msg) result(ok)
+  character(len=*), intent(in) :: msg
+
+  ok=.false.
+  if(len_trim(msg).gt.13) return
+  ok=pack77_free_text_alphabet_ok(msg(1:len_trim(msg)))
+end function pack77_exact_free_text_ok
+
+logical function pack77_free_text_alphabet_ok(msg) result(ok)
+  character(len=*), intent(in) :: msg
+  character(len=42), parameter :: alphabet=' 0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ+-./?'
+  integer :: i
+
+  ok=.false.
+  do i=1,len_trim(msg)
+     if(index(alphabet,msg(i:i)).eq.0) return
+  enddo
+  ok=.true.
+end function pack77_free_text_alphabet_ok
+
+logical function pack77_configured_type12_ok(call_1,call_2,grid4,ir) result(ok)
+! Reject hash-collision renders that cannot round-trip as configured messages.
+  character(len=*), intent(in) :: call_1,call_2,grid4
+  integer, intent(in) :: ir
+  type(pack77_type12_call_source) :: source
+  logical :: source_ok
+
+  ok=.true.
+  if(ir.eq.0 .and. call_1(1:1).eq.'<' .and. grid4.ne.'RR73') then
+     call pack77_parse_type12_call(call_2,.false.,source,source_ok)
+     if(source_ok .and. source%suffix.eq.PACK77_TYPE12_SUFFIX_R) ok=.false.
+  endif
+
+end function pack77_configured_type12_ok
+
+logical function pack77_configured_type4_ok(call_1,call_2,msg,iflip,icq,nrpt) result(ok)
+! Configured Type 4 receive policy also requires source-side call grammar.
+  character(len=*), intent(in) :: call_1,call_2,msg
+  integer, intent(in) :: iflip,icq,nrpt
+  integer :: nmsglen,indxp,nlencall2,nindxspace
+  type(pack77_type4_source) :: source
+  logical :: source_ok
+
+  ok=.true.
+  call pack77_parse_type4_source(msg,source,source_ok)
+  if(.not.source_ok) ok=.false.
+  if(.not.pack77_configured_type4_call_ok(call_2)) ok=.false.
+  if(msg(1:3).ne.'CQ ' .and. .not.pack77_configured_type4_call_ok(call_1)) &
+       ok=.false.
+  nmsglen=len_trim(msg)
+  if(ok .and. nmsglen.gt.0) then
+     indxp=index(msg,'/P ')
+     if((icq.eq.0 .and. nrpt.eq.0 .and. (indxp.lt.1 .or. indxp.gt.7)) .or. &
+          icq.eq.1) then
+        if(msg(nmsglen:nmsglen).eq.'>') ok=.false.
+     endif
+  endif
+  if(ok .and. iflip.eq.0 .and. icq.eq.0 .and. nrpt.eq.0) then
+     nlencall2=len_trim(call_2)
+     if(nlencall2.gt.9) then
+        if(call_2(1:1).eq.'/' .or. call_2(nlencall2:nlencall2).eq.'/') &
+             ok=.false.
+        nindxspace=index(call_2,' ')
+        if(nindxspace.gt.0 .and. nindxspace.lt.nlencall2) ok=.false.
+     endif
+  endif
+
+end function pack77_configured_type4_ok
+
+logical function pack77_configured_type4_call_ok(call_text) result(ok)
+  character(len=*), intent(in) :: call_text
+  integer :: ispace,islash
+
+  ok=pack77_valid_hash_call_token(call_text) .or. &
+       pack77_valid_type4_c11(call_text)
+  if(.not.ok) return
+  if(pack77_valid_hash_call_token(call_text)) return
+  if(pack77_is_digit_char(call_text(1:1)) .and. &
+       pack77_is_digit_char(call_text(2:2))) ok=.false.
+  if(len_trim(call_text).eq.11) then
+     ispace=index(call_text,' ')
+     if(ispace.gt.0 .and. ispace.lt.12) ok=.false.
+     islash=index(call_text,'/')
+     if(islash.eq.1 .or. islash.eq.2 .or. islash.eq.11 .or. &
+          (islash.eq.10 .and. pack77_is_letter_char(call_text(11:11)) .and. &
+          call_text(11:11).ne.'P')) ok=.false.
+     if(islash.lt.6 .and. pack77_is_digit_char(call_text(11:11))) ok=.false.
+  endif
+
+end function pack77_configured_type4_call_ok
 
 integer function pack77_arrl_section_index(section) result(isec)
   character(len=*), intent(in) :: section
@@ -850,6 +941,16 @@ subroutine pack77_parse_type12_source(msg,source,ok)
   endif
 
   tail=w(tail_start)
+  if(.not.source%call_1%is_cq) then
+     itail=pack77_qso_tail_index(tail)
+     if(itail.ge.1) then
+        source%ir=0
+        source%igrid4=PACK77_MAXGRID4+pack77_type12_irpt_from_tail(itail)
+        ok=.true.
+        return
+     endif
+  endif
+
   tail_is_grid=.false.
   if(len_trim(tail).eq.4) tail_is_grid=pack77_is_grid4(tail)
   if(tail_is_grid) then
@@ -859,7 +960,6 @@ subroutine pack77_parse_type12_source(msg,source,ok)
      return
   endif
   if(source%call_1%is_cq) return
-
   if(tail(1:1).eq.'+' .or. tail(1:1).eq.'-') then
      call pack77_parse_signed_report(tail,isnr,ok)
      if(.not.ok) return
@@ -886,21 +986,19 @@ subroutine pack77_parse_type12_source(msg,source,ok)
      ok=.true.
      return
   endif
-
-  itail=pack77_qso_tail_index(tail)
-  if(itail.lt.1) return
-  source%ir=0
-  source%igrid4=PACK77_MAXGRID4+pack77_type12_irpt_from_tail(itail)
-  ok=.true.
 end subroutine pack77_parse_type12_source
-logical function pack77_valid_c28_call_slot(token) result(ok)
+logical function pack77_valid_c28_call_slot(token,allow_hash_calls) result(ok)
   character(len=*), intent(in) :: token
+  logical, intent(in), optional :: allow_hash_calls
   integer :: i,n,slash
 
   ok=.false.
   n=len_trim(token)
   if(n.lt.3 .or. n.gt.13) return
-  if(pack77_valid_hash_call_token(token)) return
+  if(pack77_valid_hash_call_token(token)) then
+     if(present(allow_hash_calls)) ok=allow_hash_calls
+     return
+  endif
   do i=1,n
      if(.not.((token(i:i).ge.'A' .and. token(i:i).le.'Z') .or. &
           pack77_is_digit_char(token(i:i)) .or. token(i:i).eq.'/')) return
@@ -915,13 +1013,14 @@ logical function pack77_valid_c28_call_slot(token) result(ok)
   ok=.true.
 end function pack77_valid_c28_call_slot
 
-subroutine pack77_parse_dxpedition_source(msg,source,ok,matched_shape)
+subroutine pack77_parse_dxpedition_source(msg,source,ok,matched_shape,allow_hash_calls)
 ! DXpedition messages encode two c28 calls, a 10-bit hashed callsign, and a
 ! report in the fixed "CALL RR73; CALL <HASH> REPORT" token shape.
   character(len=*), intent(in) :: msg
   type(pack77_dxpedition_source), intent(out) :: source
   logical, intent(out) :: ok
   logical, intent(out) :: matched_shape
+  logical, intent(in), optional :: allow_hash_calls
   character(len=37) :: w(5)
   integer :: nwords
   logical :: split_ok
@@ -934,8 +1033,8 @@ subroutine pack77_parse_dxpedition_source(msg,source,ok,matched_shape)
   if(nwords.ne.5) return
   if(trim(w(2)).ne.'RR73;') return
   matched_shape=.true.
-  if(.not.pack77_valid_c28_call_slot(w(1))) return
-  if(.not.pack77_valid_c28_call_slot(w(3))) return
+  if(.not.pack77_valid_c28_call_slot(w(1),allow_hash_calls)) return
+  if(.not.pack77_valid_c28_call_slot(w(3),allow_hash_calls)) return
   if(.not.pack77_valid_hash_call_token(w(4))) return
   call pack77_parse_dxpedition_report(w(5),source%n5,ok)
   if(.not.ok) return

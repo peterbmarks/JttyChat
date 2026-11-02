@@ -17,7 +17,7 @@ find_package(OpenMP REQUIRED COMPONENTS Fortran)
 
 configure_file(src/Version.h.in ${CMAKE_BINARY_DIR}/generated/Version.h @ONLY)
 
-# JTTY mode codec (encode/decode DSP), copied from wsjtx-3.2.0-rc1's lib/jtty
+# JTTY mode codec (encode/decode DSP), copied from wsjtx-3.3.0-beta5's lib/jtty
 # and lib/ (see thirdparty/jtty_codec/NOTICE.txt). GPLv3, same as the rest of
 # this project's distribution.
 file(GLOB jtty_codec_SOURCES thirdparty/jtty_codec/*.f90)

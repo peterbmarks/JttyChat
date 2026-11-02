@@ -9,33 +9,31 @@ module packjt77
   ! decode, and configured/var decode stage calls at their boundaries, then
   ! commit them through save_hash_call instead of maintaining separate TX/RX
   ! hash stores.
-  character (len=13), dimension(0:1023) ::  calls10=''
-  character (len=13), dimension(0:4095) ::  calls12=''
-  character (len=13), dimension(1:MAXHASH) :: calls22=''
-  character (len=13), dimension(1:MAXRECENT) :: recent_calls=''
-  character (len=13) :: mycall13=''
-  character (len=13) :: dxcall13=''
-  integer, dimension(1:MAXHASH) :: ihash22=-1
-  integer :: nzhash=0
+  character (len=13), dimension(0:1023), target ::  calls10=''
+  character (len=13), dimension(0:4095), target ::  calls12=''
+  character (len=13), dimension(1:MAXHASH), target :: calls22=''
+  character (len=13), dimension(1:MAXRECENT), target :: recent_calls=''
+  character (len=13), target :: mycall13=''
+  character (len=13), target :: dxcall13=''
+  integer, dimension(1:MAXHASH), target :: ihash22=-1
+  integer, target :: nzhash=0
   ! Configured/var decodes queue per-thread facts until fillhashvar folds them
   ! into the shared hash and recent-call state.
-  character (len=13), dimension(1:840) :: queued_calls_by_thread=''
-  character (len=13), dimension(1:840) :: queued_recent_calls_by_thread=''
-  character (len=13) :: mycall13_configured=''
-  character (len=13) :: dxcall13_configured=''
-  character (len=13) :: mycall13_configured_prev=''
-  character (len=13) :: dxcall13_configured_prev=''
-  integer hashmy10_configured,hashmy12_configured,hashmy22_configured,hashdx10_configured
-  logical :: dxcall13_configured_set=.false.
-  logical :: mycall13_configured_set=.false.
-  integer, dimension(1:24) :: nqueued_calls_by_thread=0
-  integer, dimension(1:24) :: nqueued_recent_calls_by_thread=0
+  character (len=13), dimension(1:840), target :: queued_calls_by_thread=''
+  character (len=13), dimension(1:840), target :: queued_recent_calls_by_thread=''
+  character (len=13), target :: mycall13_configured=''
+  character (len=13), target :: dxcall13_configured=''
+  character (len=13), target :: mycall13_configured_prev=''
+  character (len=13), target :: dxcall13_configured_prev=''
+  integer, target :: hashmy10_configured,hashmy12_configured,hashmy22_configured,hashdx10_configured
+  logical, target :: dxcall13_configured_set=.false.
+  logical, target :: mycall13_configured_set=.false.
+  integer, dimension(1:24), target :: nqueued_calls_by_thread=0
+  integer, dimension(1:24), target :: nqueued_recent_calls_by_thread=0
   ! Per-thread slice boundaries of queued_*_by_thread; earlier (busier)
   ! decode threads get larger slots.
-  integer, dimension(1:25) :: thread_call_index=(/0,200,300,370,420,460,500,530,560,590,610,630,650,670,690,710, &
+  integer, dimension(1:25), target :: thread_call_index=(/0,200,300,370,420,460,500,530,560,590,610,630,650,670,690,710, &
                                         730,750,770,790,800,810,820,830,840/)
-  integer n28a_configured,n28b_configured
-!$omp threadprivate(n28a_configured,n28b_configured)
 ! Everything is private unless exported here; imported grammar/schema
 ! symbols therefore never re-export through "use packjt77".
   private
@@ -62,6 +60,51 @@ module packjt77
   public :: hashmy10_configured,hashmy12_configured,hashmy22_configured
   public :: hashdx10_configured
   public :: thread_call_index
+  public :: pack77_state,pack77_for_state,pack77_legacy_truncating_fallback_for_state
+  public :: unpack77_for_state,unpack77_configured_for_state
+  public :: pack28_for_state,unpack28_for_state
+  public :: hash10_for_state,hash12_for_state,hash22_for_state,save_hash_call_for_state
+  public :: queue_hash_call_for_thread_for_state,fold_queued_recent_calls_for_state
+  public :: sync_configured_calls_for_decode_start_for_state
+  public :: prepare_configured_decode_for_state,fold_queued_calls_for_state
+  public :: initialize_pack77_state,reset_pack77_state
+
+  type pack77_state
+     character(len=13), allocatable :: calls10(:),calls12(:),calls22(:),recent_calls(:)
+     character(len=13) :: mycall13='',dxcall13=''
+     integer, allocatable :: ihash22(:)
+     integer :: nzhash=0
+     character(len=13), allocatable :: queued_calls_by_thread(:),queued_recent_calls_by_thread(:)
+     integer :: nqueued_calls_by_thread(24)=0
+     integer :: nqueued_recent_calls_by_thread(24)=0
+     integer :: thread_call_index(25)=(/0,200,300,370,420,460,500,530,560,590,610,630,650,670,690,710, &
+          730,750,770,790,800,810,820,830,840/)
+     character(len=13) :: mycall13_configured='',dxcall13_configured=''
+     character(len=13) :: mycall13_configured_prev='',dxcall13_configured_prev=''
+     integer :: hashmy10_configured=-1,hashmy12_configured=-1
+     integer :: hashmy22_configured=-1,hashdx10_configured=-1
+     logical :: mycall13_configured_set=.false.,dxcall13_configured_set=.false.
+     character(len=13) :: mycall13_0='',dxcall13_0=' '
+     integer :: hashmy10=-1,hashmy12=-1,hashmy22=-1
+     integer :: hashdx10=-1,hashdx12=-1,hashdx22=-1
+     logical :: mycall13_set=.false.,dxcall13_set=.false.
+  end type pack77_state
+
+  type pack77_state_view
+     character(len=13), pointer :: calls10(:)=>null(),calls12(:)=>null(),calls22(:)=>null()
+     character(len=13), pointer :: recent_calls(:)=>null()
+     character(len=13), pointer :: mycall13=>null(),dxcall13=>null()
+     integer, pointer :: ihash22(:)=>null(),nzhash=>null()
+     character(len=13), pointer :: queued_calls_by_thread(:)=>null()
+     character(len=13), pointer :: queued_recent_calls_by_thread(:)=>null()
+     integer, pointer :: nqueued_calls_by_thread(:)=>null(),nqueued_recent_calls_by_thread(:)=>null()
+     integer, pointer :: thread_call_index(:)=>null()
+     character(len=13), pointer :: mycall13_configured=>null(),dxcall13_configured=>null()
+     character(len=13), pointer :: mycall13_configured_prev=>null(),dxcall13_configured_prev=>null()
+     integer, pointer :: hashmy10_configured=>null(),hashmy12_configured=>null()
+     integer, pointer :: hashmy22_configured=>null(),hashdx10_configured=>null()
+     logical, pointer :: mycall13_configured_set=>null(),dxcall13_configured_set=>null()
+  end type pack77_state_view
 
   integer, parameter :: PACK77_STATUS_NOT_ENCODED=0
   integer, parameter :: PACK77_STATUS_ENCODED=1
@@ -118,6 +161,7 @@ module packjt77
      integer :: hashmy12=-1
      integer :: hashmy22=-1
      integer :: hashdx10=-1
+     type(pack77_state_view) :: store
   end type unpack77_context
 
   type configured_decode_state
@@ -164,6 +208,114 @@ module packjt77
 
   contains
 
+subroutine initialize_pack77_state(state)
+  type(pack77_state), intent(inout) :: state
+
+  if(.not.allocated(state%calls10)) allocate(state%calls10(0:1023),source=repeat(' ',13))
+  if(.not.allocated(state%calls12)) allocate(state%calls12(0:4095),source=repeat(' ',13))
+  if(.not.allocated(state%calls22)) allocate(state%calls22(MAXHASH),source=repeat(' ',13))
+  if(.not.allocated(state%recent_calls)) allocate(state%recent_calls(MAXRECENT),source=repeat(' ',13))
+  if(.not.allocated(state%ihash22)) allocate(state%ihash22(MAXHASH),source=-1)
+  if(.not.allocated(state%queued_calls_by_thread)) &
+       allocate(state%queued_calls_by_thread(840),source=repeat(' ',13))
+  if(.not.allocated(state%queued_recent_calls_by_thread)) &
+       allocate(state%queued_recent_calls_by_thread(840),source=repeat(' ',13))
+end subroutine initialize_pack77_state
+
+subroutine reset_pack77_state(state)
+  type(pack77_state), intent(inout) :: state
+
+  call initialize_pack77_state(state)
+  state%calls10(:)=''
+  state%calls12(:)=''
+  state%calls22(:)=''
+  state%recent_calls(:)=''
+  state%ihash22(:)=-1
+  state%queued_calls_by_thread(:)=''
+  state%queued_recent_calls_by_thread(:)=''
+  state%nzhash=0
+  state%mycall13=''
+  state%dxcall13=''
+  state%nqueued_calls_by_thread=0
+  state%nqueued_recent_calls_by_thread=0
+  state%thread_call_index=(/0,200,300,370,420,460,500,530,560,590,610,630,650,670,690,710, &
+       730,750,770,790,800,810,820,830,840/)
+  state%mycall13_configured=''
+  state%dxcall13_configured=''
+  state%mycall13_configured_prev=''
+  state%dxcall13_configured_prev=''
+  state%hashmy10_configured=-1
+  state%hashmy12_configured=-1
+  state%hashmy22_configured=-1
+  state%hashdx10_configured=-1
+  state%mycall13_configured_set=.false.
+  state%dxcall13_configured_set=.false.
+  state%mycall13_0=''
+  state%dxcall13_0=' '
+  state%hashmy10=-1
+  state%hashmy12=-1
+  state%hashmy22=-1
+  state%hashdx10=-1
+  state%hashdx12=-1
+  state%hashdx22=-1
+  state%mycall13_set=.false.
+  state%dxcall13_set=.false.
+end subroutine reset_pack77_state
+
+type(pack77_state_view) function legacy_state_view() result(view)
+  view%calls10=>calls10
+  view%calls12=>calls12
+  view%calls22=>calls22
+  view%recent_calls=>recent_calls
+  view%mycall13=>mycall13
+  view%dxcall13=>dxcall13
+  view%ihash22=>ihash22
+  view%nzhash=>nzhash
+  view%queued_calls_by_thread=>queued_calls_by_thread
+  view%queued_recent_calls_by_thread=>queued_recent_calls_by_thread
+  view%nqueued_calls_by_thread=>nqueued_calls_by_thread
+  view%nqueued_recent_calls_by_thread=>nqueued_recent_calls_by_thread
+  view%thread_call_index=>thread_call_index
+  view%mycall13_configured=>mycall13_configured
+  view%dxcall13_configured=>dxcall13_configured
+  view%mycall13_configured_prev=>mycall13_configured_prev
+  view%dxcall13_configured_prev=>dxcall13_configured_prev
+  view%hashmy10_configured=>hashmy10_configured
+  view%hashmy12_configured=>hashmy12_configured
+  view%hashmy22_configured=>hashmy22_configured
+  view%hashdx10_configured=>hashdx10_configured
+  view%mycall13_configured_set=>mycall13_configured_set
+  view%dxcall13_configured_set=>dxcall13_configured_set
+end function legacy_state_view
+
+type(pack77_state_view) function owned_state_view(state) result(view)
+  type(pack77_state), target, intent(inout) :: state
+  call initialize_pack77_state(state)
+  view%calls10=>state%calls10
+  view%calls12=>state%calls12
+  view%calls22=>state%calls22
+  view%recent_calls=>state%recent_calls
+  view%mycall13=>state%mycall13
+  view%dxcall13=>state%dxcall13
+  view%ihash22=>state%ihash22
+  view%nzhash=>state%nzhash
+  view%queued_calls_by_thread=>state%queued_calls_by_thread
+  view%queued_recent_calls_by_thread=>state%queued_recent_calls_by_thread
+  view%nqueued_calls_by_thread=>state%nqueued_calls_by_thread
+  view%nqueued_recent_calls_by_thread=>state%nqueued_recent_calls_by_thread
+  view%thread_call_index=>state%thread_call_index
+  view%mycall13_configured=>state%mycall13_configured
+  view%dxcall13_configured=>state%dxcall13_configured
+  view%mycall13_configured_prev=>state%mycall13_configured_prev
+  view%dxcall13_configured_prev=>state%dxcall13_configured_prev
+  view%hashmy10_configured=>state%hashmy10_configured
+  view%hashmy12_configured=>state%hashmy12_configured
+  view%hashmy22_configured=>state%hashmy22_configured
+  view%hashdx10_configured=>state%hashdx10_configured
+  view%mycall13_configured_set=>state%mycall13_configured_set
+  view%dxcall13_configured_set=>state%dxcall13_configured_set
+end function owned_state_view
+
 type(pack77_result) function pack77_no_match() result(encoded)
   encoded=pack77_result()
 end function pack77_no_match
@@ -197,7 +349,8 @@ subroutine pack77_accept_candidate_encoded(candidate,i3,n3,c77,ok)
   if(ok) candidate%result=pack77_accept(i3,n3,c77)
 end subroutine pack77_accept_candidate_encoded
 
-logical function take_candidate(candidate,msg,encoded) result(won)
+logical function take_candidate(store,candidate,msg,encoded) result(won)
+  type(pack77_state_view), intent(in) :: store
   type(pack77_candidate), intent(in) :: candidate
   character(len=*), intent(in) :: msg
   type(pack77_encode_core_result), intent(inout) :: encoded
@@ -209,7 +362,7 @@ logical function take_candidate(candidate,msg,encoded) result(won)
 ! fallback callers can report what kind of exact encoding was rejected.
   won=candidate%result%encoded
   if(won) then
-     decoded=pack77_decode_neutral(candidate%result%c77)
+     decoded=pack77_decode_neutral(store,candidate%result%c77)
      call pack77_gate_message_checks(msg,decoded%msg,candidate%hash_facts%calls, &
           candidate%hash_facts%ncalls,messages_match,resolved_render_fits)
      if(.not.(decoded%success .and. decoded%i3.eq.candidate%result%i3 .and. &
@@ -224,77 +377,115 @@ logical function take_candidate(candidate,msg,encoded) result(won)
   encoded%hash_facts=candidate%hash_facts
 end function take_candidate
 
-type(unpack77_core_result) function pack77_decode_neutral(c77) result(decoded)
+type(unpack77_core_result) function pack77_decode_neutral(store,c77) result(decoded)
+  type(pack77_state_view), intent(in) :: store
   character(len=77), intent(in) :: c77
   type(unpack77_context) :: context
 
   context=unpack77_context()
+  context%store=store
   decoded=unpack77_core(c77,context)
 end function pack77_decode_neutral
 
-integer function pack77_wspr_payload_type(c77) result(wspr_type)
-  character(len=77), intent(in) :: c77
-
-! Bit columns 49/50 are the j49/j50 subtype selector fields fixed by the
-! WSPR schemas in packjt77_schema; keep in sync with those field offsets.
-  wspr_type=0
-  if(c77(50:50).eq.'1') then
-     wspr_type=2
-  else if(c77(49:49).eq.'0') then
-     wspr_type=1
-  else if(c77(49:49).eq.'1') then
-     ! Invalid selector 110 reaches Type 3; the schema decoder rejects it.
-     wspr_type=3
-  endif
-end function pack77_wspr_payload_type
 
 
 
 
 subroutine hash10(n10,c13)
+  integer, intent(in) :: n10
+  character*13 c13
+
+  call hash10_core(legacy_state_view(),n10,c13)
+end subroutine hash10
+
+subroutine hash10_for_state(state,n10,c13)
+  type(pack77_state), target, intent(inout) :: state
+  integer, intent(in) :: n10
+  character*13 c13
+
+  call hash10_core(owned_state_view(state),n10,c13)
+end subroutine hash10_for_state
+
+subroutine hash10_core(store,n10,c13)
+  type(pack77_state_view), intent(in) :: store
+  integer, intent(in) :: n10
 
   character*13 c13
 
   c13='<...>'
   if(n10.lt.0 .or. n10.gt.1023) return
-  if(len(trim(calls10(n10))).gt.0) then
-     c13=calls10(n10)
+  if(len(trim(store%calls10(n10))).gt.0) then
+     c13=store%calls10(n10)
      c13='<'//trim(c13)//'>'
   endif
   return
 
-end subroutine hash10
+end subroutine hash10_core
 
 subroutine hash12(n12,c13)
+  integer, intent(in) :: n12
+  character*13 c13
+
+  call hash12_core(legacy_state_view(),n12,c13)
+end subroutine hash12
+
+subroutine hash12_for_state(state,n12,c13)
+  type(pack77_state), target, intent(inout) :: state
+  integer, intent(in) :: n12
+  character*13 c13
+
+  call hash12_core(owned_state_view(state),n12,c13)
+end subroutine hash12_for_state
+
+subroutine hash12_core(store,n12,c13)
+  type(pack77_state_view), intent(in) :: store
+  integer, intent(in) :: n12
 
   character*13 c13
 
   c13='<...>'
   if(n12.lt.0 .or. n12.gt.4095) return
-  if(len(trim(calls12(n12))).gt.0) then
-     c13=calls12(n12)
+  if(len(trim(store%calls12(n12))).gt.0) then
+     c13=store%calls12(n12)
      c13='<'//trim(c13)//'>'
   endif
   return
 
-end subroutine hash12
+end subroutine hash12_core
 
 
 subroutine hash22(n22,c13)
+  integer, intent(in) :: n22
+  character*13 c13
+
+  call hash22_core(legacy_state_view(),n22,c13)
+end subroutine hash22
+
+subroutine hash22_for_state(state,n22,c13)
+  type(pack77_state), target, intent(inout) :: state
+  integer, intent(in) :: n22
+  character*13 c13
+
+  call hash22_core(owned_state_view(state),n22,c13)
+end subroutine hash22_for_state
+
+subroutine hash22_core(store,n22,c13)
+  type(pack77_state_view), intent(in) :: store
+  integer, intent(in) :: n22
 
   character*13 c13
 
   c13='<...>'
-  do i=1,nzhash
-     if(ihash22(i).eq.n22) then
-        c13=calls22(i)
+  do i=1,store%nzhash
+     if(store%ihash22(i).eq.n22) then
+        c13=store%calls22(i)
         c13='<'//trim(c13)//'>'
         go to 900
      endif
   enddo
 
 900 return
-end subroutine hash22
+end subroutine hash22_core
 
 
 integer function ihashcall(c0,m)
@@ -354,8 +545,25 @@ integer function ihashcall_from_n8(n8,m)
 end function ihashcall_from_n8
 
 subroutine save_hash_call(c13,n10,n12,n22)
+  character*13 c13
+  integer :: n10,n12,n22
+
+  call save_hash_call_core(legacy_state_view(),c13,n10,n12,n22)
+end subroutine save_hash_call
+
+subroutine save_hash_call_for_state(state,c13,n10,n12,n22)
+  type(pack77_state), target, intent(inout) :: state
+  character*13 c13
+  integer :: n10,n12,n22
+
+  call save_hash_call_core(owned_state_view(state),c13,n10,n12,n22)
+end subroutine save_hash_call_for_state
+
+subroutine save_hash_call_core(store,c13,n10,n12,n22)
+  type(pack77_state_view), intent(in) :: store
 
   character*13 c13,cw
+  integer :: n10,n12,n22
 
   cw=c13
   if(cw(1:1).eq.' ' .or. cw(1:5).eq.'<...>') return
@@ -366,28 +574,28 @@ subroutine save_hash_call(c13,n10,n12,n22)
   if(len(trim(cw)) .lt. 3) return
 
   n10=ihashcall(cw,10)
-  if(n10.ge.0 .and. n10 .le. 1023 .and. cw.ne.mycall13) calls10(n10)=cw
+  if(n10.ge.0 .and. n10 .le. 1023 .and. cw.ne.store%mycall13) store%calls10(n10)=cw
 
   n12=ihashcall(cw,12)
-  if(n12.ge.0 .and. n12 .le. 4095 .and. cw.ne.mycall13) calls12(n12)=cw
+  if(n12.ge.0 .and. n12 .le. 4095 .and. cw.ne.store%mycall13) store%calls12(n12)=cw
 
   n22=ihashcall(cw,22)
-  if(any(ihash22.eq.n22)) then   ! If entry exists, make sure callsign is the most recently received one
-    where(ihash22.eq.n22) calls22=cw
+  if(any(store%ihash22.eq.n22)) then   ! If entry exists, make sure callsign is the most recently received one
+    where(store%ihash22.eq.n22) store%calls22=cw
     go to 900
   endif
 
 ! New entry: move table down, making room for new one at the top
-  ihash22(MAXHASH:2:-1)=ihash22(MAXHASH-1:1:-1)
+  store%ihash22(MAXHASH:2:-1)=store%ihash22(MAXHASH-1:1:-1)
 
 ! Add the new entry
-  calls22(MAXHASH:2:-1)=calls22(MAXHASH-1:1:-1)
-  ihash22(1)=n22
-  calls22(1)=cw
-  if(nzhash.lt.MAXHASH) nzhash=nzhash+1
+  store%calls22(MAXHASH:2:-1)=store%calls22(MAXHASH-1:1:-1)
+  store%ihash22(1)=n22
+  store%calls22(1)=cw
+  if(store%nzhash.lt.MAXHASH) store%nzhash=store%nzhash+1
 900 continue
   return
-end subroutine save_hash_call
+end subroutine save_hash_call_core
 
 subroutine normalize_hash_call(c13,cw,ok)
 
@@ -445,14 +653,15 @@ subroutine pack77_hash_index(hash_facts,token,nbits,n,ok)
   return
 end subroutine pack77_hash_index
 
-subroutine commit_hash_facts(hash_facts)
+subroutine commit_hash_facts(store,hash_facts)
+  type(pack77_state_view), intent(in) :: store
 
   type(pack77_hash_facts), intent(in) :: hash_facts
   integer :: i,n10,n12,n22
 
 ! All hash-producing encode paths feed the same shared tables here.
   do i=1,hash_facts%ncalls
-     call save_hash_call(hash_facts%calls(i),n10,n12,n22)
+     call save_hash_call_core(store,hash_facts%calls(i),n10,n12,n22)
   enddo
 
   return
@@ -524,10 +733,12 @@ logical function pack77_failed_preferred_wspr_shape(msg0,options) result(reject)
        len_trim(source_tokens(2)).le.6
 end function pack77_failed_preferred_wspr_shape
 
-type(pack77_encode_core_result) function pack77_encode_core(msg0,options) &
+type(pack77_encode_core_result) function pack77_encode_core(store,msg0,options) &
      result(encoded)
+  type(pack77_state_view), intent(in) :: store
 
-  character*37 msg,msg0
+  character*37 msg
+  character(len=*), intent(in) :: msg0
   character(len=13) :: source_tokens(19)
   type(pack77_options), intent(in), optional :: options
   type(pack77_candidate) :: candidate
@@ -568,14 +779,14 @@ type(pack77_encode_core_result) function pack77_encode_core(msg0,options) &
 
 ! Check 0.1 (DXpedition mode)
      candidate=pack77_01_candidate(msg)
-     if(take_candidate(candidate,msg,encoded)) return
+     if(take_candidate(store,candidate,msg,encoded)) return
 ! Check 0.2 (EU VHF contest exchange)
 !  call pack77_02(nwords,w,i3,n3,c77)
 !  if(i3.ge.0) go to 900
 
 ! Check 0.3 and 0.4 (ARRL Field Day exchange)
      candidate=pack77_03_candidate(msg)
-     if(take_candidate(candidate,msg,encoded)) return
+     if(take_candidate(store,candidate,msg,encoded)) return
      if(nwords.lt.2) then
 
 ! Check 0.5 (telemetry)
@@ -585,31 +796,32 @@ type(pack77_encode_core_result) function pack77_encode_core(msg0,options) &
   endif
 
   candidate=pack77_06_candidate(msg,prefer_wspr_50bit)
-  if(take_candidate(candidate,msg,encoded)) return
+  if(take_candidate(store,candidate,msg,encoded)) return
 
 ! Check Type 1 (Standard 77-bit message) or Type 2, with optional "/P"
   candidate=pack77_1_candidate(msg)
-  if(take_candidate(candidate,msg,encoded)) return
+  if(take_candidate(store,candidate,msg,encoded)) return
 
 ! Check Type 3 (ARRL RTTY contest exchange)
   candidate=pack77_3_candidate(msg)
-  if(take_candidate(candidate,msg,encoded)) return
+  if(take_candidate(store,candidate,msg,encoded)) return
 
 ! Check Type 4 (One nonstandard call and one hashed call)
   candidate=pack77_4_candidate(msg)
-  if(take_candidate(candidate,msg,encoded)) return
+  if(take_candidate(store,candidate,msg,encoded)) return
 
 ! Check Type 5 (EU VHF Contest with 2 hashed calls, report, serial, and grid6)
   candidate=pack77_5_candidate(msg)
-  if(take_candidate(candidate,msg,encoded)) return
+  if(take_candidate(store,candidate,msg,encoded)) return
 
 ! It defaults to exactly representable free text.
   encoded%result=pack77_free_text_exact(msg)
 end function pack77_encode_core
 
-type(pack77_result) function pack77_encode_result(msg0,options) result(encoded)
+type(pack77_result) function pack77_encode_result(store,msg0,options) result(encoded)
+  type(pack77_state_view), intent(in) :: store
 
-  character*37 msg0
+  character(len=*), intent(in) :: msg0
   type(pack77_options), intent(in), optional :: options
   type(pack77_encode_core_result) :: core
   logical :: record_tx_hashes
@@ -617,13 +829,13 @@ type(pack77_result) function pack77_encode_result(msg0,options) result(encoded)
   record_tx_hashes=.true.
   if(present(options)) record_tx_hashes=options%record_tx_hashes
 
-  core=pack77_encode_core(msg0,options)
+  core=pack77_encode_core(store,msg0,options)
   encoded=core%result
   if(.not.encoded%encoded .and. &
        encoded%status.ne.PACK77_STATUS_INTERNAL_ROUNDTRIP_REJECTED .and. &
        pack77_failed_preferred_wspr_shape(pack77_normalized_message(msg0), &
        options)) encoded=pack77_reject(PACK77_STATUS_PREFERRED_FAMILY_REJECTED)
-  if(record_tx_hashes) call commit_hash_facts(core%hash_facts)
+  if(record_tx_hashes) call commit_hash_facts(store,core%hash_facts)
 end function pack77_encode_result
 
 subroutine pack77(msg0,i3,n3,c77,options,status)
@@ -634,12 +846,28 @@ subroutine pack77(msg0,i3,n3,c77,options,status)
   integer, intent(out), optional :: status
   type(pack77_result) :: packed
 
-  packed=pack77_encode_result(msg0,options)
+  packed=pack77_encode_result(legacy_state_view(),msg0,options)
   i3=packed%i3
   n3=packed%n3
   c77=packed%c77
   if(present(status)) status=packed%status
 end subroutine pack77
+
+subroutine pack77_for_state(state,msg0,i3,n3,c77,options,status)
+  type(pack77_state), target, intent(inout) :: state
+  character(len=*), intent(in) :: msg0
+  integer, intent(out) :: i3,n3
+  character(len=77), intent(out) :: c77
+  type(pack77_options), intent(in), optional :: options
+  integer, intent(out), optional :: status
+  type(pack77_result) :: packed
+
+  packed=pack77_encode_result(owned_state_view(state),msg0,options)
+  i3=packed%i3
+  n3=packed%n3
+  c77=packed%c77
+  if(present(status)) status=packed%status
+end subroutine pack77_for_state
 
 subroutine pack77_legacy_truncating_fallback(msg0,i3,n3,c77,options,status)
   character(len=*), intent(in) :: msg0
@@ -649,22 +877,39 @@ subroutine pack77_legacy_truncating_fallback(msg0,i3,n3,c77,options,status)
   integer, intent(out), optional :: status
   type(pack77_result) :: packed
 
-  packed=pack77_legacy_truncating_result(msg0,options)
+  packed=pack77_legacy_truncating_result(legacy_state_view(),msg0,options)
   i3=packed%i3
   n3=packed%n3
   c77=packed%c77
   if(present(status)) status=packed%status
 end subroutine pack77_legacy_truncating_fallback
 
-type(pack77_result) function pack77_legacy_truncating_result(msg0,options) &
+subroutine pack77_legacy_truncating_fallback_for_state(state,msg0,i3,n3,c77,options,status)
+  type(pack77_state), target, intent(inout) :: state
+  character(len=*), intent(in) :: msg0
+  integer, intent(out) :: i3,n3
+  character(len=77), intent(out) :: c77
+  type(pack77_options), intent(in), optional :: options
+  integer, intent(out), optional :: status
+  type(pack77_result) :: packed
+
+  packed=pack77_legacy_truncating_result(owned_state_view(state),msg0,options)
+  i3=packed%i3
+  n3=packed%n3
+  c77=packed%c77
+  if(present(status)) status=packed%status
+end subroutine pack77_legacy_truncating_fallback_for_state
+
+type(pack77_result) function pack77_legacy_truncating_result(store,msg0,options) &
      result(encoded)
+  type(pack77_state_view), intent(in) :: store
   character(len=*), intent(in) :: msg0
   type(pack77_options), intent(in), optional :: options
   type(pack77_result) :: fallback
   character(len=37) :: msg
   character(len=13) :: payload
 
-  encoded=pack77_encode_result(msg0,options)
+  encoded=pack77_encode_result(store,msg0,options)
   if(encoded%encoded) return
   if(encoded%status.eq.PACK77_STATUS_PREFERRED_FAMILY_REJECTED) return
   if(encoded%status.eq.PACK77_STATUS_INTERNAL_ROUNDTRIP_REJECTED) return
@@ -759,25 +1004,7 @@ integer function pack77_free_text_reject_status(msg) result(status)
   endif
 end function pack77_free_text_reject_status
 
-logical function pack77_exact_free_text_ok(msg) result(ok)
-  character(len=*), intent(in) :: msg
 
-  ok=.false.
-  if(len_trim(msg).gt.13) return
-  ok=pack77_free_text_alphabet_ok(msg(1:len_trim(msg)))
-end function pack77_exact_free_text_ok
-
-logical function pack77_free_text_alphabet_ok(msg) result(ok)
-  character(len=*), intent(in) :: msg
-  character(len=42), parameter :: alphabet=' 0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ+-./?'
-  integer :: i
-
-  ok=.false.
-  do i=1,len_trim(msg)
-     if(index(alphabet,msg(i:i)).eq.0) return
-  enddo
-  ok=.true.
-end function pack77_free_text_alphabet_ok
 
 ! Must mirror the character canonicalization of pack77_split_source_tokens
 ! (NUL->space, uppercase fold, blank collapse) so free text and structured
@@ -850,6 +1077,7 @@ subroutine unpack77(c77,nrx,msg,unpk77_success)
   context%nrx=nrx
   context%configured=.false.
   context%strict_var_guards=.false.
+  context%store=legacy_state_view()
   context%mycall_set=mycall13_set
   context%dxcall_set=dxcall13_set
   context%mycall=mycall13
@@ -865,6 +1093,52 @@ subroutine unpack77(c77,nrx,msg,unpk77_success)
   return
 end subroutine unpack77
 
+subroutine unpack77_for_state(state,c77,nrx,msg,unpk77_success)
+  type(pack77_state), target, intent(inout) :: state
+  character*77 c77
+  character*37 msg
+  integer, intent(in) :: nrx
+  logical unpk77_success
+  type(unpack77_context) :: context
+  type(unpack77_effect_policy) :: policy
+
+  context%store=owned_state_view(state)
+  if(state%mycall13.ne.state%mycall13_0) then
+     if(len(trim(state%mycall13)).gt.2) then
+        state%mycall13_set=.true.
+        state%mycall13_0=state%mycall13
+        call save_hash_call_core(context%store,state%mycall13, &
+             state%hashmy10,state%hashmy12,state%hashmy22)
+     else
+        state%mycall13_set=.false.
+     endif
+  endif
+  if(state%dxcall13.ne.state%dxcall13_0) then
+     if(len(trim(state%dxcall13)).gt.2) then
+        state%dxcall13_set=.true.
+        state%dxcall13_0=state%dxcall13
+        state%hashdx10=ihashcall(state%dxcall13,10)
+        state%hashdx12=ihashcall(state%dxcall13,12)
+        state%hashdx22=ihashcall(state%dxcall13,22)
+     else
+        state%dxcall13_set=.false.
+     endif
+  endif
+  context%nrx=nrx
+  context%configured=.false.
+  context%strict_var_guards=.false.
+  context%mycall_set=state%mycall13_set
+  context%dxcall_set=state%dxcall13_set
+  context%mycall=state%mycall13
+  context%dxcall=state%dxcall13
+  context%hashmy10=state%hashmy10
+  context%hashmy12=state%hashmy12
+  context%hashmy22=state%hashmy22
+  context%hashdx10=state%hashdx10
+  policy=unpack77_effect_policy()
+  call run_unpack77(c77,context,policy,msg,unpk77_success)
+end subroutine unpack77_for_state
+
 subroutine pack28(c13,n28)
 ! Callers must pass a well-formed callsign or special/hash token. Malformed
 ! tokens are encoded as 22-bit hashes, never coerced to standard calls, per the
@@ -874,10 +1148,20 @@ subroutine pack28(c13,n28)
   type(pack77_hash_facts) :: hash_facts
 
   call pack28_core(c13,n28,hash_facts)
-  call commit_hash_facts(hash_facts)
+  call commit_hash_facts(legacy_state_view(),hash_facts)
 
   return
 end subroutine pack28
+
+subroutine pack28_for_state(state,c13,n28)
+  type(pack77_state), target, intent(inout) :: state
+  character*13 c13
+  integer, intent(out) :: n28
+  type(pack77_hash_facts) :: hash_facts
+
+  call pack28_core(c13,n28,hash_facts)
+  call commit_hash_facts(owned_state_view(state),hash_facts)
+end subroutine pack28_for_state
 
 subroutine pack28_core(c13,n28,hash_facts)
 
@@ -1005,12 +1289,22 @@ subroutine unpack28(n28_0,c13,success)
   character*13 c13
   logical success
 
-  call unpack28_core(n28_0,c13,success,.false.)
+  call unpack28_core(legacy_state_view(),n28_0,c13,success,.false.)
 
   return
 end subroutine unpack28
 
-subroutine unpack28_core(n28_0,c13,success,reject_two_digit_prefix)
+subroutine unpack28_for_state(state,n28_0,c13,success)
+  type(pack77_state), target, intent(inout) :: state
+  integer, intent(in) :: n28_0
+  character*13 c13
+  logical success
+
+  call unpack28_core(owned_state_view(state),n28_0,c13,success,.false.)
+end subroutine unpack28_for_state
+
+subroutine unpack28_core(store,n28_0,c13,success,reject_two_digit_prefix)
+  type(pack77_state_view), intent(in) :: store
   logical success,callok
   logical, intent(in) :: reject_two_digit_prefix
   character*13 c13
@@ -1055,7 +1349,7 @@ subroutine unpack28_core(n28_0,c13,success,reject_two_digit_prefix)
   if(n28.lt.PACK77_MAX22) then
 ! This is a 22-bit hash of a callsign
      n22=n28
-     call hash22(n22,c13)     !Retrieve callsign from hash table
+     call hash22_core(store,n22,c13)     !Retrieve callsign from hash table
      go to 900
   endif
 
@@ -1246,6 +1540,13 @@ subroutine mp_short_init
 end subroutine mp_short_init
 
 subroutine add_call_to_recent_calls(callsign)
+  character*13 callsign
+
+  call add_call_to_recent_calls_core(legacy_state_view(),callsign)
+end subroutine add_call_to_recent_calls
+
+subroutine add_call_to_recent_calls_core(store,callsign)
+  type(pack77_state_view), intent(in) :: store
 
   character*13 callsign
   logical ladd
@@ -1253,21 +1554,21 @@ subroutine add_call_to_recent_calls(callsign)
 ! only add if the callsign is not already on the list
   ladd=.true.
   do i=1,MAXRECENT-1 ! if callsign is at the end of the list add it again
-     if(recent_calls(i).eq.callsign) ladd=.false.
+     if(store%recent_calls(i).eq.callsign) ladd=.false.
   enddo
 
   if(ladd) then
      do i=MAXRECENT,2,-1
-        recent_calls(i)=recent_calls(i-1)
+        store%recent_calls(i)=store%recent_calls(i-1)
      enddo
-     recent_calls(1)=callsign
+     store%recent_calls(1)=callsign
   endif
 
 ! Recent-call ordering is separate from hash storage; decode paths stage both
 ! effects explicitly when a call should become recent and hash-resolvable.
 
   return
-end subroutine add_call_to_recent_calls
+end subroutine add_call_to_recent_calls_core
 
 
 
@@ -1277,23 +1578,48 @@ subroutine queue_hash_call_for_thread(c13,nthr)
 
 ! Configured/var decode workers queue hash facts; fillhashvar later folds them
 ! into the shared calls10/calls12/calls22 tables.
-  call queue_call_for_thread(c13,nthr,queued_calls_by_thread, &
-       nqueued_calls_by_thread)
+  call queue_hash_call_core(legacy_state_view(),c13,nthr)
 
   return
 end subroutine queue_hash_call_for_thread
+
+subroutine queue_hash_call_for_thread_for_state(state,c13,nthr)
+  type(pack77_state), target, intent(inout) :: state
+  character*13 c13
+  integer, intent(in) :: nthr
+
+  call queue_hash_call_core(owned_state_view(state),c13,nthr)
+end subroutine queue_hash_call_for_thread_for_state
+
+subroutine queue_hash_call_core(store,c13,nthr)
+  type(pack77_state_view), intent(in) :: store
+  character*13 c13
+  integer, intent(in) :: nthr
+
+  call queue_call_for_thread(store,c13,nthr,store%queued_calls_by_thread, &
+       store%nqueued_calls_by_thread)
+end subroutine queue_hash_call_core
 
 subroutine queue_recent_call_for_thread(c13,nthr)
   character*13 c13
   integer, intent(in) :: nthr
 
-  call queue_call_for_thread(c13,nthr,queued_recent_calls_by_thread, &
-       nqueued_recent_calls_by_thread)
+  call queue_recent_call_core(legacy_state_view(),c13,nthr)
 
   return
 end subroutine queue_recent_call_for_thread
 
-subroutine queue_call_for_thread(c13,nthr,queued_calls,nqueued_calls)
+subroutine queue_recent_call_core(store,c13,nthr)
+  type(pack77_state_view), intent(in) :: store
+  character*13 c13
+  integer, intent(in) :: nthr
+
+  call queue_call_for_thread(store,c13,nthr,store%queued_recent_calls_by_thread, &
+       store%nqueued_recent_calls_by_thread)
+end subroutine queue_recent_call_core
+
+subroutine queue_call_for_thread(store,c13,nthr,queued_calls,nqueued_calls)
+  type(pack77_state_view), intent(in) :: store
   character(len=*), intent(in) :: c13
   integer, intent(in) :: nthr
   character(len=13), intent(inout) :: queued_calls(:)
@@ -1308,8 +1634,8 @@ subroutine queue_call_for_thread(c13,nthr,queued_calls,nqueued_calls)
   if(i.gt.0) cw(i:)='         '
   if(len(trim(cw)) .lt. 3) return
 
-  nposition=thread_call_index(nthr)+nqueued_calls(nthr)
-  if(nposition.lt.thread_call_index(nthr+1)) then
+  nposition=store%thread_call_index(nthr)+nqueued_calls(nthr)
+  if(nposition.lt.store%thread_call_index(nthr+1)) then
     nqueued_calls(nthr)=nqueued_calls(nthr)+1
     queued_calls(nposition+1)=cw
   endif
@@ -1318,129 +1644,190 @@ subroutine queue_call_for_thread(c13,nthr,queued_calls,nqueued_calls)
 end subroutine queue_call_for_thread
 
 subroutine fold_queued_recent_calls(numthreads)
+  integer, intent(in) :: numthreads
+
+  call fold_queued_recent_calls_core(legacy_state_view(),numthreads)
+end subroutine fold_queued_recent_calls
+
+subroutine fold_queued_recent_calls_for_state(state,numthreads)
+  type(pack77_state), target, intent(inout) :: state
+  integer, intent(in) :: numthreads
+
+  call fold_queued_recent_calls_core(owned_state_view(state),numthreads)
+end subroutine fold_queued_recent_calls_for_state
+
+subroutine fold_queued_recent_calls_core(store,numthreads)
+  type(pack77_state_view), intent(in) :: store
 
   integer, intent(in) :: numthreads
   character*13 cw
 
   do i=1,numthreads
-    do m=1,nqueued_recent_calls_by_thread(i)
-      nposition=thread_call_index(i)+m
-      cw=queued_recent_calls_by_thread(nposition)
-      call add_call_to_recent_calls(cw)
+    do m=1,store%nqueued_recent_calls_by_thread(i)
+      nposition=store%thread_call_index(i)+m
+      cw=store%queued_recent_calls_by_thread(nposition)
+      call add_call_to_recent_calls_core(store,cw)
     enddo
   enddo
 
   return
-end subroutine fold_queued_recent_calls
+end subroutine fold_queued_recent_calls_core
 
 subroutine sync_configured_calls_for_decode_start()
+  call sync_configured_calls_core(legacy_state_view())
+end subroutine sync_configured_calls_for_decode_start
+
+subroutine sync_configured_calls_for_decode_start_for_state(state)
+  type(pack77_state), target, intent(inout) :: state
+
+  call sync_configured_calls_core(owned_state_view(state))
+end subroutine sync_configured_calls_for_decode_start_for_state
+
+subroutine prepare_configured_decode_for_state(state,mycall,hiscall)
+  type(pack77_state), target, intent(inout) :: state
+  character(len=*), intent(in) :: mycall,hiscall
+
+  state%nqueued_calls_by_thread=0
+  state%nqueued_recent_calls_by_thread=0
+  state%mycall13=mycall
+  state%dxcall13=hiscall
+  call sync_configured_calls_core(owned_state_view(state))
+end subroutine prepare_configured_decode_for_state
+
+subroutine fold_queued_calls_for_state(state,numthreads)
+  type(pack77_state), target, intent(inout) :: state
+  integer, intent(in) :: numthreads
+  type(pack77_state_view) :: store
+  integer :: i,m,nposition,n10,n12,n22
+
+  store=owned_state_view(state)
+  do i=1,numthreads
+     do m=1,store%nqueued_calls_by_thread(i)
+        nposition=store%thread_call_index(i)+m
+        call save_hash_call_core(store,store%queued_calls_by_thread(nposition),n10,n12,n22)
+     enddo
+  enddo
+  call fold_queued_recent_calls_core(store,numthreads)
+end subroutine fold_queued_calls_for_state
+
+subroutine sync_configured_calls_core(store)
+  type(pack77_state_view), intent(in) :: store
 
 ! Capture the operator-configured calls at decode-cycle boundaries. These
 ! hashes let configured decodes resolve hash-only messages without a separate
 ! var hash table.
-  if(mycall13.ne.mycall13_configured_prev) then
-    if(len(trim(mycall13)).gt.2) then
-       call set_configured_mycall_from_current()
+  if(store%mycall13.ne.store%mycall13_configured_prev) then
+    if(len(trim(store%mycall13)).gt.2) then
+       call set_configured_mycall_from_current(store)
     else
-       call clear_configured_mycall()
+       call clear_configured_mycall(store)
     endif
   endif
-  call sync_configured_mycall_value_from_current()
+  call sync_configured_mycall_value_from_current(store)
 
-  if(dxcall13.ne.dxcall13_configured_prev) then
-    if(len(trim(dxcall13)).gt.2) then
-       call set_configured_dxcall_from_current()
+  if(store%dxcall13.ne.store%dxcall13_configured_prev) then
+    if(len(trim(store%dxcall13)).gt.2) then
+       call set_configured_dxcall_from_current(store)
     else
-       call clear_configured_dxcall()
+       call clear_configured_dxcall(store)
     endif
   endif
-  call sync_configured_dxcall_value_from_current()
+  call sync_configured_dxcall_value_from_current(store)
 
   return
-end subroutine sync_configured_calls_for_decode_start
+end subroutine sync_configured_calls_core
 
-subroutine set_configured_mycall_from_current()
+subroutine set_configured_mycall_from_current(store)
+  type(pack77_state_view), intent(in) :: store
 
-  mycall13_configured_set=.true.
-  mycall13_configured=mycall13
-  mycall13_configured_prev=mycall13
-  hashmy10_configured=ihashcall(mycall13,10)
-  hashmy12_configured=ihashcall(mycall13,12)
-  hashmy22_configured=ihashcall(mycall13,22)
-  call save_hash_call(mycall13,ndum10,ndum12,ndum22)
+  store%mycall13_configured_set=.true.
+  store%mycall13_configured=store%mycall13
+  store%mycall13_configured_prev=store%mycall13
+  store%hashmy10_configured=ihashcall(store%mycall13,10)
+  store%hashmy12_configured=ihashcall(store%mycall13,12)
+  store%hashmy22_configured=ihashcall(store%mycall13,22)
+  call save_hash_call_core(store,store%mycall13,ndum10,ndum12,ndum22)
 
   return
 end subroutine set_configured_mycall_from_current
 
-subroutine clear_configured_mycall()
+subroutine clear_configured_mycall(store)
+  type(pack77_state_view), intent(in) :: store
 
-  mycall13_configured_set=.false.
-  mycall13_configured='             '
-  mycall13_configured_prev='             '
-  hashmy10_configured=-1
-  hashmy12_configured=-1
-  hashmy22_configured=-1
+  store%mycall13_configured_set=.false.
+  store%mycall13_configured='             '
+  store%mycall13_configured_prev='             '
+  store%hashmy10_configured=-1
+  store%hashmy12_configured=-1
+  store%hashmy22_configured=-1
 
   return
 end subroutine clear_configured_mycall
 
-subroutine sync_configured_mycall_value_from_current()
+subroutine sync_configured_mycall_value_from_current(store)
+  type(pack77_state_view), intent(in) :: store
 
-  if(mycall13_configured_set) mycall13_configured=mycall13
+  if(store%mycall13_configured_set) store%mycall13_configured=store%mycall13
 
   return
 end subroutine sync_configured_mycall_value_from_current
 
-subroutine set_configured_dxcall_from_current()
+subroutine set_configured_dxcall_from_current(store)
+  type(pack77_state_view), intent(in) :: store
 
-  dxcall13_configured_set=.true.
-  dxcall13_configured=dxcall13
-  dxcall13_configured_prev=dxcall13
-  hashdx10_configured=ihashcall(dxcall13,10)
+  store%dxcall13_configured_set=.true.
+  store%dxcall13_configured=store%dxcall13
+  store%dxcall13_configured_prev=store%dxcall13
+  store%hashdx10_configured=ihashcall(store%dxcall13,10)
   ! Seed the manual DX Call before decode so first-cycle hash references to it
   ! can resolve even if the call has not yet been decoded over the air.
-  call queue_hash_call_for_thread(dxcall13,1)
+  call queue_hash_call_core(store,store%dxcall13,1)
 
   return
 end subroutine set_configured_dxcall_from_current
 
-subroutine clear_configured_dxcall()
+subroutine clear_configured_dxcall(store)
+  type(pack77_state_view), intent(in) :: store
 
-  dxcall13_configured_set=.false.
-  dxcall13_configured='             '
-  dxcall13_configured_prev='             '
-  hashdx10_configured=-1
+  store%dxcall13_configured_set=.false.
+  store%dxcall13_configured='             '
+  store%dxcall13_configured_prev='             '
+  store%hashdx10_configured=-1
 
   return
 end subroutine clear_configured_dxcall
 
-subroutine sync_configured_dxcall_value_from_current()
+subroutine sync_configured_dxcall_value_from_current(store)
+  type(pack77_state_view), intent(in) :: store
 
-  if(dxcall13_configured_set) dxcall13_configured=dxcall13
+  if(store%dxcall13_configured_set) store%dxcall13_configured=store%dxcall13
 
   return
 end subroutine sync_configured_dxcall_value_from_current
 
-type(configured_decode_state) function current_configured_decode_state() &
+type(configured_decode_state) function current_configured_decode_state(store) &
      result(state)
+  type(pack77_state_view), intent(in) :: store
 
-  state%mycall_set=mycall13_configured_set
-  state%dxcall_set=dxcall13_configured_set
-  state%mycall=mycall13_configured
-  state%dxcall=dxcall13_configured
-  state%hashmy10=hashmy10_configured
-  state%hashmy12=hashmy12_configured
-  state%hashmy22=hashmy22_configured
-  state%hashdx10=hashdx10_configured
+  state%mycall_set=store%mycall13_configured_set
+  state%dxcall_set=store%dxcall13_configured_set
+  state%mycall=store%mycall13_configured
+  state%dxcall=store%dxcall13_configured
+  state%hashmy10=store%hashmy10_configured
+  state%hashmy12=store%hashmy12_configured
+  state%hashmy22=store%hashmy22_configured
+  state%hashdx10=store%hashdx10_configured
 
   return
 end function current_configured_decode_state
 
-type(unpack77_context) function configured_unpack77_context(nrx) result(context)
+type(unpack77_context) function configured_unpack77_context(store,nrx) result(context)
+  type(pack77_state_view), intent(in) :: store
   integer, intent(in) :: nrx
   type(configured_decode_state) :: state
 
-  state=current_configured_decode_state()
+  state=current_configured_decode_state(store)
+  context%store=store
   context%nrx=nrx
   context%configured=.true.
   context%strict_var_guards=.true.
@@ -1473,12 +1860,27 @@ subroutine unpack77_configured(c77,nrx,msg,unpk77_successvar,options)
   type(unpack77_context) :: context
   type(unpack77_effect_policy) :: policy
 
-  context=configured_unpack77_context(nrx)
+  context=configured_unpack77_context(legacy_state_view(),nrx)
   policy=configured_unpack77_effect_policy(options)
   call run_unpack77(c77,context,policy,msg,unpk77_successvar)
 
   return
 end subroutine unpack77_configured
+
+subroutine unpack77_configured_for_state(state,c77,nrx,msg,unpk77_successvar,options)
+  type(pack77_state), target, intent(inout) :: state
+  character*77 c77
+  character*37 msg
+  integer, intent(in) :: nrx
+  logical unpk77_successvar
+  type(unpack77_options), intent(in) :: options
+  type(unpack77_context) :: context
+  type(unpack77_effect_policy) :: policy
+
+  context=configured_unpack77_context(owned_state_view(state),nrx)
+  policy=configured_unpack77_effect_policy(options)
+  call run_unpack77(c77,context,policy,msg,unpk77_successvar)
+end subroutine unpack77_configured_for_state
 
 subroutine run_unpack77(c77,context,policy,msg,unpk77_success)
   character*77 c77
@@ -1491,7 +1893,7 @@ subroutine run_unpack77(c77,context,policy,msg,unpk77_success)
   decoded=unpack77_core(c77,context)
   msg=decoded%msg
   unpk77_success=decoded%success
-  if(unpk77_success) call apply_unpack77_effects(decoded%effects,policy)
+  if(unpk77_success) call apply_unpack77_effects(context%store,decoded%effects,policy)
 
   return
 end subroutine run_unpack77
@@ -1573,14 +1975,13 @@ subroutine unpack77_decode_i3_0(c77,context,decoded)
      n28b=dxpedition_fields%n28b
      n10=dxpedition_fields%n10
      n5=dxpedition_fields%n5
-     call record_configured_n28_pair(context,n28a,n28b)
      irpt=2*n5 - 30
      crpt=pack77_format_snr_report(irpt)
      call unpack28_for_context(context,n28a,call_1,unpk28_success)
      if(.not.unpk28_success .or. n28a.le.2) decoded%success=.false.
      call unpack28_for_context(context,n28b,call_2,unpk28_success)
      if(.not.unpk28_success .or. n28b.le.2) decoded%success=.false.
-     call hash10(n10,call_3)
+     call hash10_core(context%store,n10,call_3)
      if(context%nrx.eq.1) then
         if(context%dxcall_set .and. len(trim(context%dxcall)).ge.3 .and. &
              context%hashdx10.eq.n10) then
@@ -1612,7 +2013,6 @@ subroutine unpack77_decode_i3_0(c77,context,decoded)
      intx=field_day_fields%intx
      nclass=field_day_fields%nclass
      isec=field_day_fields%isec
-     call record_configured_n28_pair(context,n28a,n28b)
      if(isec.gt.PACK77_NSEC .or. isec.lt.1) then
          decoded%success=.false.
          isec=1
@@ -1640,7 +2040,7 @@ subroutine unpack77_decode_i3_0(c77,context,decoded)
 1007 format(3z6.6)
 
   else if(decoded%n3.eq.6) then
-     select case(pack77_wspr_payload_type(c77))
+     select case(pack77_wspr_payload_type(c77,.true.))
      case(2)
         call decode_pack77_wspr_type2(c77,wspr2_fields,ok,.true.)
         if(.not.ok) then
@@ -1739,7 +2139,6 @@ subroutine unpack77_decode_type12(c77,context,decoded)
   ipb=type12_fields%ipb
   ir=type12_fields%ir
   igrid4=type12_fields%igrid4
-  call record_configured_n28_pair(context,n28a,n28b)
   call unpack28_for_context(context,n28a,call_1,unpk28_success)
   if(context%nrx.eq.1 .and. context%mycall_set .and. &
        context%hashmy22.eq.(n28a-PACK77_NTOKENS)) then
@@ -1773,7 +2172,7 @@ subroutine unpack77_decode_type12(c77,context,decoded)
      if(.not.unpkg4_success) decoded%success=.false.
      decoded%msg=pack77_format_exchange_message(call_1,call_2,ir,grid4,.true.)
      if(decoded%msg(1:3).eq.'CQ ' .and. ir.eq.1) decoded%success=.false.
-     if(context%strict_var_guards .and. .not.unpack77_type12_var_guard_ok( &
+     if(context%strict_var_guards .and. .not.pack77_configured_type12_ok( &
           call_1,call_2,grid4,ir)) decoded%success=.false.
   else
      irpt=igrid4-PACK77_MAXGRID4
@@ -1812,7 +2211,6 @@ subroutine unpack77_decode_type3(c77,context,decoded)
   ir=type3_fields%ir
   irpt=type3_fields%irpt
   nexch=type3_fields%nexch
-  call record_configured_n28_pair(context,n28a,n28b)
   crpt=pack77_format_rtty_report(irpt)
   call unpack28_for_context(context,n28a,call_1,unpk28_success)
   if(.not.unpk28_success) decoded%success=.false.
@@ -1859,7 +2257,7 @@ subroutine unpack77_decode_type4(c77,context,decoded)
   iflip=type4_fields%iflip
   nrpt=type4_fields%nrpt
   icq=type4_fields%icq
-  call hash12(n12,call_3)
+  call hash12_core(context%store,n12,call_3)
   if(iflip.eq.0) then       ! 12 bit hash for TO call
      call_1=call_3
      call_2=adjustl(c11)//'  '
@@ -1885,7 +2283,7 @@ subroutine unpack77_decode_type4(c77,context,decoded)
   else
      decoded%msg='CQ '//trim(call_2)
   endif
-  if(context%strict_var_guards .and. .not.unpack77_type4_var_guard_ok( &
+  if(context%strict_var_guards .and. .not.pack77_configured_type4_ok( &
        call_1,call_2,decoded%msg,iflip,icq,nrpt)) decoded%success=.false.
 
   return
@@ -1912,9 +2310,9 @@ subroutine unpack77_decode_type5(c77,context,decoded)
   irpt=type5_fields%irpt
   iserial=type5_fields%iserial
   igrid6=type5_fields%igrid6
-  call hash12(n12,call_1)
+  call hash12_core(context%store,n12,call_1)
   if(n12.eq.context%hashmy12) call_1='<'//trim(context%mycall)//'>'
-  call hash22(n22,call_2)
+  call hash22_core(context%store,n22,call_2)
   cexch=pack77_format_vhf_exchange(irpt,iserial)
   call to_grid6(igrid6,grid6,decoded%success)
   decoded%msg=pack77_format_exchange_message(call_1,call_2,ir,cexch//' '//grid6,.true.)
@@ -1958,7 +2356,8 @@ subroutine stage_unpack_call(calls,ncalls,c13)
   return
 end subroutine stage_unpack_call
 
-subroutine apply_unpack77_effects(effects,policy)
+subroutine apply_unpack77_effects(store,effects,policy)
+  type(pack77_state_view), intent(in) :: store
   type(unpack77_effects), intent(in) :: effects
   type(unpack77_effect_policy), intent(in) :: policy
   integer :: i,n10,n12,n22
@@ -1968,19 +2367,19 @@ subroutine apply_unpack77_effects(effects,policy)
   if(policy%record_hashes) then
      do i=1,effects%nhash
         if(policy%queue_by_thread) then
-           call queue_hash_call_for_thread(effects%hash_calls(i),policy%nthr_hash)
+           call queue_hash_call_core(store,effects%hash_calls(i),policy%nthr_hash)
         else
-           call save_hash_call(effects%hash_calls(i),n10,n12,n22)
+           call save_hash_call_core(store,effects%hash_calls(i),n10,n12,n22)
         endif
      enddo
   endif
   if(policy%record_recent_calls) then
      do i=1,effects%nrecent
         if(policy%queue_by_thread) then
-           call queue_recent_call_for_thread(effects%recent_calls(i), &
+           call queue_recent_call_core(store,effects%recent_calls(i), &
                 policy%nthr_recent)
         else
-           call add_call_to_recent_calls(effects%recent_calls(i))
+           call add_call_to_recent_calls_core(store,effects%recent_calls(i))
         endif
      enddo
   endif
@@ -1994,101 +2393,14 @@ subroutine unpack28_for_context(context,n28,c13,success)
   character*13 c13
   logical success
 
-  if(context%configured) then
-     call unpack28_configured(n28,c13,success)
-  else
-     call unpack28(n28,c13,success)
-  endif
+  call unpack28_core(context%store,n28,c13,success,context%configured)
 
   return
 end subroutine unpack28_for_context
 
-subroutine record_configured_n28_pair(context,n28a,n28b)
-  type(unpack77_context), intent(in) :: context
-  integer, intent(in) :: n28a,n28b
 
-  if(.not.context%configured) return
-  n28a_configured=n28a
-  n28b_configured=n28b
 
-  return
-end subroutine record_configured_n28_pair
 
-logical function unpack77_type12_var_guard_ok(call_1,call_2,grid4,ir) result(ok)
-! Configured decode rejects a few hash-collision renders that parse as valid
-! source messages but cannot round-trip through the configured var encoder.
-  character(len=*), intent(in) :: call_1,call_2,grid4
-  integer, intent(in) :: ir
-  type(pack77_type12_call_source) :: source
-  logical :: source_ok
-
-  ok=.true.
-  if(ir.eq.0 .and. call_1(1:1).eq.'<' .and. grid4.ne.'RR73') then
-     call pack77_parse_type12_call(call_2,.false.,source,source_ok)
-     if(source_ok .and. source%suffix.eq.PACK77_TYPE12_SUFFIX_R) ok=.false.
-  endif
-
-  return
-end function unpack77_type12_var_guard_ok
-
-logical function unpack77_type4_var_guard_ok(call_1,call_2,msg,iflip,icq,nrpt) result(ok)
-! Type 4 can decode arbitrary 58-bit text as plausible calls; configured var
-! mode keeps only renders that also satisfy the source-side Type 4 grammar.
-  character(len=*), intent(in) :: call_1,call_2,msg
-  integer, intent(in) :: iflip,icq,nrpt
-  integer :: nmsglen,indxp,nlencall2,nindxspace
-  type(pack77_type4_source) :: source
-  logical :: source_ok
-
-  ok=.true.
-  call pack77_parse_type4_source(msg,source,source_ok)
-  if(.not.source_ok) ok=.false.
-  if(.not.unpack77_type4_call_guard_ok(call_2)) ok=.false.
-  if(msg(1:3).ne.'CQ ' .and. .not.unpack77_type4_call_guard_ok(call_1)) &
-       ok=.false.
-  nmsglen=len_trim(msg)
-  if(ok .and. nmsglen.gt.0) then
-     indxp=index(msg,'/P ')
-     if((icq.eq.0 .and. nrpt.eq.0 .and. (indxp.lt.1 .or. indxp.gt.7)) .or. &
-          icq.eq.1) then
-        if(msg(nmsglen:nmsglen).eq.'>') ok=.false.
-     endif
-  endif
-  if(ok .and. iflip.eq.0 .and. icq.eq.0 .and. nrpt.eq.0) then
-     nlencall2=len_trim(call_2)
-     if(nlencall2.gt.9) then
-        if(call_2(1:1).eq.'/' .or. call_2(nlencall2:nlencall2).eq.'/') &
-             ok=.false.
-        nindxspace=index(call_2,' ')
-        if(nindxspace.gt.0 .and. nindxspace.lt.nlencall2) ok=.false.
-     endif
-  endif
-
-  return
-end function unpack77_type4_var_guard_ok
-
-logical function unpack77_type4_call_guard_ok(call_text) result(ok)
-  character(len=*), intent(in) :: call_text
-  integer :: ispace,islash
-
-  ok=pack77_valid_hash_call_token(call_text) .or. &
-       pack77_valid_type4_c11(call_text)
-  if(.not.ok) return
-  if(pack77_valid_hash_call_token(call_text)) return
-  if(pack77_is_digit_char(call_text(1:1)) .and. &
-       pack77_is_digit_char(call_text(2:2))) ok=.false.
-  if(len_trim(call_text).eq.11) then
-     ispace=index(call_text,' ')
-     if(ispace.gt.0 .and. ispace.lt.12) ok=.false.
-     islash=index(call_text,'/')
-     if(islash.eq.1 .or. islash.eq.2 .or. islash.eq.11 .or. &
-          (islash.eq.10 .and. pack77_is_letter_char(call_text(11:11)) .and. &
-          call_text(11:11).ne.'P')) ok=.false.
-     if(islash.lt.6 .and. pack77_is_digit_char(call_text(11:11))) ok=.false.
-  endif
-
-  return
-end function unpack77_type4_call_guard_ok
 
 subroutine lower_c28_slot(token,allow_auto_hash,n28,hash_facts,ok)
   character(len=*), intent(in) :: token
@@ -2177,16 +2489,6 @@ logical function pack77_field_day_render_fits(source) result(ok)
   ok=n.le.37
 end function pack77_field_day_render_fits
 
-
-subroutine unpack28_configured(n28_0,c13,success)
-  integer, intent(in) :: n28_0
-  character*13 c13
-  logical success
-
-  call unpack28_core(n28_0,c13,success,.true.)
-
-  return
-end subroutine unpack28_configured
 
 type(pack77_candidate) function pack77_01_candidate(msg) result(candidate)
 

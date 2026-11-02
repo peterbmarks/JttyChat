@@ -324,7 +324,7 @@ void MainWindow::openAboutDialog()
             "<p>A desktop chat client for the JTTY amateur radio digital mode.</p>"
             "<p>Created by Peter Marks, VK3TPM.</p>"
             "<p>The JTTY encode/decode engine is copied from a fork of "
-            "<a href=\"https://wsjtx.github.io/wsjtx/\">WSJT-X</a> (wsjtx-3.2.0-rc1), "
+            "<a href=\"https://wsjtx.github.io/wsjtx/\">WSJT-X</a> (wsjtx-3.3.0-beta5), "
             "developed by the WSJT Development Team: Joe Taylor, K1JT; Bill Somerville, "
             "G4WJS; Steve Franke, K9AN; Nico Palermo, IV3NWV; Uwe Risse, DG2YCB; Brian "
             "Moran, N9ADG; Roger Rehr, W3SZ; John Nelson, G4KLA; Charlie Suckling, DL3WDG; "

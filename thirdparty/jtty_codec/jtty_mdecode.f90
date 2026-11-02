@@ -1,6 +1,6 @@
 module jtty_mdec
 
-  use iso_fortran_env, only: int64
+  use iso_fortran_env, only: int64, real64
   use iso_c_binding, only: c_ptr,c_null_ptr,c_associated,c_f_pointer, &
        c_float_complex,c_size_t
   use jtty_mod, only: MAX_FRAMES
@@ -13,9 +13,9 @@ module jtty_mdec
   type :: decode
      real :: f1    = 0.0              !Synced audio frequency
      real :: xdt   = 0.0              !Synced DT (0 to 0.5 s)
-     real :: tsync = 0.0              !Time of sync from istart=1
+     real(real64) :: tsync = 0.0_real64
      real :: snrdb = 0.0              !SNR of decoded frame
-     integer :: nsymerrs = 0          !Channel symbols that disagreed with the error-corrected codeword
+     integer :: nsymerrs = 0          !Channel symbols that disagreed with the error-corrected codeword (JttyChat)
      character(len=80) :: decoded = ''
      logical :: trailing_sep = .false. !decoded ends with an implicit separator column
      logical :: is_last_frame = .false. !this frame had the "last frame of message" bit set
@@ -24,28 +24,32 @@ module jtty_mdec
   type :: message_assembly
      integer(int64) :: message_id = 0_int64
      real :: f1 = 0.0
-     real :: tsync = 0.0
-     real :: start_tsync = 0.0
+     real(real64) :: tsync = 0.0_real64
+     real(real64) :: start_tsync = 0.0_real64
+     real :: start_snrdb = 0.0        !SNR of the message's first frame; never reassigned after
      integer :: k = 0
      character(len=80) :: decoded = ''
      logical :: trailing_sep = .false.
-     real :: snrdb = 0.0              !SNR of the most recently decoded frame
-     integer :: nsymerrs = 0          !Symbol errors in the most recently decoded frame
+     real :: snrdb = 0.0              !SNR of the most recently decoded frame (JttyChat)
+     integer :: nsymerrs = 0          !Symbol errors in the most recently decoded frame (JttyChat)
   end type message_assembly
 
   type :: frame_fingerprint
      real :: f1 = 0.0
-     real :: tsync = 0.0
+     real(real64) :: tsync = 0.0_real64
   end type frame_fingerprint
 
   type :: message_update
      integer(int64) :: message_id = 0_int64
      real :: f1 = 0.0
-     real :: start_tsync = 0.0
+     real(real64) :: start_tsync = 0.0_real64
+     real(real64) :: latest_tsync = 0.0_real64
+     real :: snr = 0.0
      character(len=80) :: decoded = ''
      logical :: complete = .false.
-     real :: snrdb = 0.0
-     integer :: nsymerrs = 0
+     integer :: terminal = 0
+     real :: snrdb = 0.0              !SNR of the most recently decoded frame (JttyChat)
+     integer :: nsymerrs = 0          !Symbol errors in the most recently decoded frame (JttyChat)
   end type message_update
 
   integer, parameter        :: MAX_DECODES = 100
@@ -53,16 +57,37 @@ module jtty_mdec
   integer, parameter        :: MAX_RECENT_FRAMES = MAX_ACTIVE_MESSAGES*MAX_FRAMES
   integer, parameter        :: MAX_CONTINUATION_GAP = 3
   integer, parameter        :: MAX_RETRO_STEPS = 3
+  integer, parameter        :: MAX_DISPLAY_GAPS = 16   ! 80 characters / 5 per '~~~~~' sentinel
   real, parameter           :: FRAME_HISTORY_TIME_TOLERANCE = 0.05
   real, parameter           :: FRAME_HISTORY_FREQ_TOLERANCE = 3.0
   real, parameter           :: NEAR_SIMULTANEOUS_FREQ_TOLERANCE = 12.0
   real, parameter           :: CONTINUATION_TIME_TOLERANCE = 0.1
+  ! Alias rejection (see is_frame_alias). A sync candidate that lands a whole
+  ! number of symbols inside an already-decoded frame of the same signal (or
+  ! a tone spacing or two away from it) can pass the permissive channel-0
+  ! sync gate and still yield a TBCC codeword, producing a plausible but false
+  ! frame such as "IG4QXF TU". Its received symbols are that known frame's
+  ! tones, shifted; an independent overlapping station's are not.
+  real, parameter           :: ALIAS_FREQ_TONES = 2.5
+  real, parameter           :: ALIAS_MAX_SYMBOL_FRACTION = 0.25
+  integer, parameter        :: ALIAS_MIN_OVERLAP = 9
+  real, parameter           :: ALIAS_MIN_AGREEMENT = 0.8
+  integer, parameter        :: MAX_ALIAS_REFERENCES = 32
+  integer, parameter        :: ALIAS_FRAME_SYMBOLS = 59
+  ! pn leaks ~SNR_LEAKAGE_K*pt of signal power; corrected ratio still asymptotes near (1-k)/k for very strong signals.
+  real, parameter           :: SNR_LEAKAGE_K = 0.048
+  real, parameter           :: SNR_FLOOR_DB = -17.0  ! weaker than the weakest sometimes-decodable JTTY signal
   integer                   :: ndecodes = 0
   integer                   :: nactive = 0
   integer                   :: nrecent = 0
   integer                   :: npending = 0
   integer                   :: pending_first = 1
   integer(int64)            :: next_message_id = 1_int64
+  integer, parameter        :: UPDATE_GROWING=0, UPDATE_COMPLETE=1
+  integer, parameter        :: UPDATE_EXPIRED=2, UPDATE_RECEPTION_ENDED=3
+  integer(int64)            :: sample_origin = 0_int64
+  integer(int64)            :: first_search_sample = 0_int64
+  logical                   :: explicit_receive_context = .false.
   type(message_assembly)    :: active_messages(MAX_ACTIVE_MESSAGES)
   type(frame_fingerprint)   :: recent_frames(MAX_RECENT_FRAMES)
   type(message_update), allocatable :: pending_updates(:)
@@ -73,12 +98,18 @@ module jtty_mdec
   integer, parameter        :: MAX_SUBTRACTED = 16
   logical                   :: interferer_pending = .false.
   real                      :: interferer_f1 = 0.0
-  real                      :: interferer_tsync = 0.0
+  real(real64)              :: interferer_tsync = 0.0_real64
   integer                   :: interferer_payload(PAYLOAD_BITS) = 0
   integer                   :: nsubtracted = 0
   real                      :: subtracted_f1(MAX_SUBTRACTED) = 0.0
-  real                      :: subtracted_tsync(MAX_SUBTRACTED) = 0.0
+  real(real64)              :: subtracted_tsync(MAX_SUBTRACTED) = 0.0_real64
   integer                   :: subtracted_payload(PAYLOAD_BITS,MAX_SUBTRACTED) = 0
+  ! Recently decoded frames (frequency, sync time, full tone sequence) that
+  ! later candidates are checked against for aliasing.
+  integer                   :: nalias_refs = 0, next_alias_ref = 1
+  real                      :: alias_ref_f1(MAX_ALIAS_REFERENCES) = 0.0
+  real(real64)              :: alias_ref_tsync(MAX_ALIAS_REFERENCES) = 0.0_real64
+  integer                   :: alias_ref_tones(ALIAS_FRAME_SYMBOLS,MAX_ALIAS_REFERENCES) = 0
   complex, allocatable, private :: sync_chirp_weights(:),sync_chirp_kernel(:)
   integer, private :: sync_chirp_samples=0,sync_chirp_first_bin=-1
   integer, private :: sync_chirp_output_count=0
@@ -94,6 +125,10 @@ module jtty_mdec
   end type sync_fft_cache
   integer, parameter, private :: MIN_SYNC_FFT_ORDER=11,MAX_SYNC_FFT_ORDER=13
   type(sync_fft_cache), private :: sync_fft_caches(MIN_SYNC_FFT_ORDER:MAX_SYNC_FFT_ORDER)
+
+  interface prune_receive_state
+     module procedure prune_receive_state_real64, prune_receive_state_real32
+  end interface
 
 contains
 
@@ -222,9 +257,17 @@ contains
       sync_chirp_output_count=0
   end subroutine jtty_release_fft_resources
 
+  pure real(real64) function sample_time(index)
+      integer, intent(in) :: index
+
+      sample_time=real(sample_origin+int(index-1,int64),real64)/12000.0_real64
+  end function sample_time
+
   subroutine reset_decode_search_state()
       nactive=0
       nrecent=0
+      nalias_refs=0
+      next_alias_ref=1
   end subroutine reset_decode_search_state
 
   subroutine discard_pending_updates()
@@ -233,33 +276,127 @@ contains
   end subroutine discard_pending_updates
 
   pure logical function same_frame(f1_a,tsync_a,f1_b,tsync_b)
-      real, intent(in) :: f1_a,tsync_a,f1_b,tsync_b
+      real, intent(in) :: f1_a,f1_b
+      real(real64), intent(in) :: tsync_a,tsync_b
 
       same_frame=abs(f1_a-f1_b).lt.FRAME_HISTORY_FREQ_TOLERANCE .and. &
            abs(tsync_a-tsync_b).lt.FRAME_HISTORY_TIME_TOLERANCE
   end function same_frame
 
   pure logical function same_recent_frame(f1_a,tsync_a,f1_b,tsync_b)
-      real, intent(in) :: f1_a,tsync_a,f1_b,tsync_b
+      real, intent(in) :: f1_a,f1_b
+      real(real64), intent(in) :: tsync_a,tsync_b
 
       same_recent_frame=abs(f1_a-f1_b).lt.NEAR_SIMULTANEOUS_FREQ_TOLERANCE .and. &
            abs(tsync_a-tsync_b).lt.FRAME_HISTORY_TIME_TOLERANCE
   end function same_recent_frame
 
+  subroutine remember_alias_reference(f1,tsync,tones)
+      real, intent(in) :: f1
+      real(real64), intent(in) :: tsync
+      integer, intent(in) :: tones(ALIAS_FRAME_SYMBOLS)
+      integer :: i
+
+      do i=1,nalias_refs                ! the same frame decoded again
+         if(abs(alias_ref_tsync(i)-tsync).lt.0.01_real64 .and. &
+              abs(alias_ref_f1(i)-f1).lt.3.0) return
+      enddo
+      alias_ref_f1(next_alias_ref)=f1
+      alias_ref_tsync(next_alias_ref)=tsync
+      alias_ref_tones(:,next_alias_ref)=tones
+      nalias_refs=min(nalias_refs+1,MAX_ALIAS_REFERENCES)
+      next_alias_ref=mod(next_alias_ref,MAX_ALIAS_REFERENCES)+1
+  end subroutine remember_alias_reference
+
+! True when a candidate frame (frequency f1, sync time tsync, hard-decision
+! received tones rx) is a misaligned view of a recently decoded frame: within
+! ALIAS_FREQ_TONES tone spacings of it, overlapping it in time at a near-whole
+! number of symbols (but not frame-aligned), and with its received tones
+! matching that frame's tones, shifted by the same symbols and tones. Frames
+! already subtracted in this pass are skipped: their energy is gone from the
+! search data, so the candidate cannot be seeing them.
+  logical function is_frame_alias(f1,tsync,rx,tone_spacing,frame_period)
+      real, intent(in) :: f1,tone_spacing,frame_period
+      real(real64), intent(in) :: tsync
+      integer, intent(in) :: rx(ALIAS_FRAME_SYMBOLS)
+      real(real64) :: dt,nsym
+      real :: df
+      integer :: i,j,m,nshift,ktone,expected,noverlap,nagree
+      logical :: gone
+
+      is_frame_alias=.false.
+      do i=1,nalias_refs
+         df=f1-alias_ref_f1(i)
+         if(abs(df).ge.ALIAS_FREQ_TONES*tone_spacing) cycle
+         gone=.false.
+         do j=1,nsubtracted
+            if(abs(subtracted_tsync(j)-alias_ref_tsync(i)).lt.0.001_real64 .and. &
+                 abs(subtracted_f1(j)-alias_ref_f1(i)).lt.0.1) gone=.true.
+         enddo
+         if(gone) cycle
+         dt=tsync-alias_ref_tsync(i)
+         if(abs(dt).ge.frame_period) cycle
+         nsym=dt*tone_spacing          ! offset in symbols (tone spacing = baud)
+         if(abs(nsym-anint(nsym)).gt.ALIAS_MAX_SYMBOL_FRACTION) cycle
+         nshift=nint(nsym)
+         if(nshift.eq.0) cycle         ! frame-aligned: a dupe, not an alias
+         ktone=-nint(df/tone_spacing)  ! a higher candidate sees lower tones
+         noverlap=0
+         nagree=0
+         do j=1,ALIAS_FRAME_SYMBOLS
+            m=j+nshift
+            if(m.lt.1 .or. m.gt.ALIAS_FRAME_SYMBOLS) cycle
+            expected=alias_ref_tones(m,i)+ktone
+            if(expected.lt.0 .or. expected.gt.3) cycle
+            noverlap=noverlap+1
+            if(rx(j).eq.expected) nagree=nagree+1
+         enddo
+         if(noverlap.lt.ALIAS_MIN_OVERLAP) cycle
+         if(real(nagree).ge.ALIAS_MIN_AGREEMENT*real(noverlap)) then
+            is_frame_alias=.true.
+            return
+         endif
+      enddo
+  end function is_frame_alias
+
   pure function display_message_text(decoded) result(msg)
       character(len=*), intent(in) :: decoded
       character(len=80) :: msg
+      integer :: gaps(MAX_DISPLAY_GAPS),ngaps
+
+      call display_message_layout(decoded,msg,gaps,ngaps)
+  end function display_message_text
+
+! display_message_text's rendering of decoded, and gaps(1:ngaps): the 0-based
+! offset in msg of the first '.' of each '...' that stands for missed frames
+! (append_active_message's '~~~~~' sentinel), never of typed dots. Markers
+! beyond size(gaps) are rendered but not reported.
+  pure subroutine display_message_layout(decoded,msg,gaps,ngaps)
+      character(len=*), intent(in) :: decoded
+      character(len=80), intent(out) :: msg
+      integer, intent(out) :: gaps(:)
+      integer, intent(out) :: ngaps
       integer :: i
 
       msg=decoded
+      ngaps=0
       do i=1,len_trim(msg)-4
-         if(msg(i:i+4).eq.'~~~~~') msg(i:i+4)=' ... '
+         if(msg(i:i+4).eq.'~~~~~') then
+            msg(i:i+4)=' ... '
+            if(ngaps.lt.size(gaps)) then
+               ngaps=ngaps+1
+               gaps(ngaps)=i
+            endif
+         endif
       enddo
       do i=1,len_trim(msg)
          if(msg(i:i).eq.'~') msg(i:i)=' '
       enddo
-      if(msg(1:1).eq.' ') msg=trim(msg(2:))
-  end function display_message_text
+      if(msg(1:1).eq.' ') then
+         msg=trim(msg(2:))
+         gaps(1:ngaps)=gaps(1:ngaps)-1
+      endif
+  end subroutine display_message_layout
 
   logical function is_recent_frame(candidate)
       type(decode), intent(in) :: candidate
@@ -288,11 +425,16 @@ contains
       recent_frames(nrecent)%tsync=candidate%tsync
   end subroutine remember_recent_frame
 
-  subroutine queue_message_update(message,complete)
+  subroutine queue_message_update(message,complete,terminal)
       type(message_assembly), intent(in) :: message
       logical, intent(in) :: complete
+      integer, optional, intent(in) :: terminal
       type(message_update), allocatable :: grown(:)
-      integer :: i,index,new_capacity
+      integer :: i,index,new_capacity,status
+
+      status=UPDATE_GROWING
+      if(complete) status=UPDATE_COMPLETE
+      if(present(terminal)) status=terminal
 
       do i=0,npending-1
          index=pending_first+i
@@ -300,6 +442,8 @@ contains
             pending_updates(index)%f1=message%f1
             pending_updates(index)%decoded=message%decoded
             pending_updates(index)%complete=complete
+            pending_updates(index)%latest_tsync=message%tsync
+            pending_updates(index)%terminal=status
             pending_updates(index)%snrdb=message%snrdb
             pending_updates(index)%nsymerrs=message%nsymerrs
             return
@@ -325,8 +469,11 @@ contains
       pending_updates(index)%message_id=message%message_id
       pending_updates(index)%f1=message%f1
       pending_updates(index)%start_tsync=message%start_tsync
+      pending_updates(index)%latest_tsync=message%tsync
+      pending_updates(index)%snr=message%start_snrdb
       pending_updates(index)%decoded=message%decoded
       pending_updates(index)%complete=complete
+      pending_updates(index)%terminal=status
       pending_updates(index)%snrdb=message%snrdb
       pending_updates(index)%nsymerrs=message%nsymerrs
   end subroutine queue_message_update
@@ -353,6 +500,7 @@ contains
       message%f1=candidate%f1
       message%tsync=candidate%tsync
       message%start_tsync=candidate%tsync
+      message%start_snrdb=candidate%snrdb
       message%decoded=candidate%decoded
       if(message%decoded(1:4).eq.'599 ') &
            message%decoded='~'//trim(message%decoded)
@@ -416,9 +564,10 @@ contains
       accepted=.true.
   end subroutine append_active_message
 
-  subroutine prune_receive_state(forward_tsync,frame_period)
-      real, intent(in) :: forward_tsync,frame_period
-      real :: oldest_revisit
+  subroutine prune_receive_state_real64(forward_tsync,frame_period)
+      real(real64), intent(in) :: forward_tsync
+      real, intent(in) :: frame_period
+      real(real64) :: oldest_revisit
       integer :: i,keep
 
       oldest_revisit=forward_tsync-real(MAX_RETRO_STEPS)*frame_period/4.0
@@ -437,13 +586,19 @@ contains
          if(oldest_revisit-active_messages(i)%tsync.gt. &
               real(MAX_CONTINUATION_GAP)*frame_period+ &
               CONTINUATION_TIME_TOLERANCE) then
-            call queue_message_update(active_messages(i),.false.)
+            call queue_message_update(active_messages(i),.false.,UPDATE_EXPIRED)
             call remove_active_message(i)
          else
             i=i+1
          endif
       enddo
-  end subroutine prune_receive_state
+  end subroutine prune_receive_state_real64
+
+  subroutine prune_receive_state_real32(forward_tsync,frame_period)
+      real, intent(in) :: forward_tsync,frame_period
+
+      call prune_receive_state_real64(real(forward_tsync,real64),frame_period)
+  end subroutine prune_receive_state_real32
   subroutine jtty_tbcc_reencode_for_subtraction(payload, tones)
       integer, intent(in) :: payload(PAYLOAD_BITS)
       integer, intent(out) :: tones(TOTAL_K)
@@ -487,7 +642,8 @@ contains
       real, intent(in) :: frame_period
       logical, intent(out) :: match,is_window_dupe
       integer, intent(out) :: nframes_gap
-      real :: df1,dtsync,qstep,resid,fp_resid,df_tol
+      real :: df1,df_tol
+      real(real64) :: dtsync,qstep,resid,fp_resid
       integer :: nstep,nfp
 
       df1=candidate%f1-existing%f1
@@ -555,14 +711,16 @@ contains
       integer, save                  :: nfft,nh2,nss
       integer                        :: iloc(1)
       integer                        :: irxsync(NSYNC_SYM), irxchan(NCHAN_SYM)
+      integer                        :: rx_frame(NFRAME_SYM)
       integer                        :: iactive
       integer                        :: nsloc(2),nfz,ntz,ncand,ic,nc,nstep_search
       integer                        :: nc0,n_ch0_ok
       integer                        :: ja_ch0_ok(16),jb_ch0_ok(16)
-      real                            :: f1_ch0_ok(16),tsync_ch0_ok(16)
+      real                            :: f1_ch0_ok(16)
+      real(real64)                    :: tsync_ch0_ok(16)
       integer                        :: nsync,nsymerrs
       real                           :: fc,fwid
-      real                           :: fpk,pa,pt,pn
+      real                           :: fpk,pa,pt,pn,pn_corrected
       real                           :: fbest,xdtbest
       real                           :: xdt_retry
       real, allocatable, save        :: s0(:,:)
@@ -594,7 +752,8 @@ contains
       type(decode)                   :: cand(MAXCAND)     !Candidates for decoding
       type(decode)                   :: dec               !Current successful decode
       logical                        :: use_interferer
-      real                            :: use_interferer_f1, use_interferer_tsync
+      real                            :: use_interferer_f1
+      real(real64)                    :: use_interferer_tsync
       integer                         :: use_interferer_payload(PAYLOAD_BITS)
 
 ! Capture and clear the retro-resweep interferer request (if any) as the
@@ -609,7 +768,7 @@ contains
 
       nsync=0
 
-      if(istart.eq.istart0 .and. .not.use_interferer) then
+      if(istart.eq.istart0 .and. .not.use_interferer .and. .not.explicit_receive_context) then
          ndecodes=0
          call reset_decode_search_state()
       endif
@@ -679,7 +838,7 @@ contains
          call jtty_tbcc_reencode_for_subtraction(use_interferer_payload, tone_symbols_chk)
          tone_symbols_full(NSYNC_SYM+1:NFRAME_SYM)=tone_symbols_chk
          call subtract_jtty(c0, nana, nchunk6, tone_symbols_full, NFRAME_SYM, &
-              nss, use_interferer_f1, use_interferer_tsync-(istart-1)/12000.0)
+              nss, use_interferer_f1, real(use_interferer_tsync-sample_time(istart)))
       endif
 
 ! Look for up to 2 sync candidates in each quarter-frame (0.424 second) by 2*FTol rectangle in
@@ -987,13 +1146,13 @@ contains
          do ir=1,nactive
             if(active_messages(ir)%f1.lt.fc-fwid .or. &
                  active_messages(ir)%f1.gt.fc+fwid) cycle
-            if(abs(((istart-1)/12000.0 - active_messages(ir)%tsync) - &
+            if(abs((sample_time(istart) - active_messages(ir)%tsync) - &
                  nframe6/6000.0) &
                  .gt. 0.1) cycle
             ! Derive the local offset from absolute sync time because the
             ! assembly may have been updated from a different decode window.
             xdt_retry=active_messages(ir)%tsync + nframe6/6000.0 - &
-                 (istart-1)/12000.0
+                 sample_time(istart)
             if(xdt_retry.lt.0.0) cycle
             if(ncand .ge. MAXCAND) exit
             ncand=ncand+1
@@ -1076,11 +1235,18 @@ contains
       enddo
       pn=(pa-pt)/3.0
       if(pn.gt.0.) then
-         snrdb=db(pt/pn)
+         ! Solve pt=S+N, pn=N+SNR_LEAKAGE_K*S for S/N
+         snrdb=max(db((pt-pn)/pn) - db(2500.0/baud), SNR_FLOOR_DB)
          cand(ncand)%snrdb=snrdb
       endif
       cand(ncand)%nsymerrs=nsymerrs
-      cand(ncand)%tsync=(istart-1)/12000.0 + cand(ncand)%xdt
+      cand(ncand)%tsync=sample_time(istart) + real(cand(ncand)%xdt,real64)
+      if(ic_label.ge.0) then
+         rx_frame(1:NSYNC_SYM)=irxsync
+         rx_frame(NSYNC_SYM+1:NFRAME_SYM)=irxchan
+         if(is_frame_alias(cand(ncand)%f1,cand(ncand)%tsync,rx_frame,baud, &
+              nframe6/6000.0)) return
+      endif
       decoded_ok=.true.
 
 ! dupe detection
@@ -1110,6 +1276,7 @@ contains
       call subtract_jtty(c0, nana, nchunk6, tone_symbols_full, NFRAME_SYM,   &
            nss, cand(ncand)%f1, cand(ncand)%xdt)
       any_subtracted=.true.
+      call remember_alias_reference(cand(ncand)%f1,cand(ncand)%tsync,tone_symbols_full)
       s0_valid=.false.
 
       if(nsubtracted.lt.MAX_SUBTRACTED) then
@@ -1203,12 +1370,12 @@ contains
       real, intent(in)           :: f0, ftol, smin
       integer                    :: n_local, nframe, step, istart_prev, k, i
       real                       :: f1_local(MAX_SUBTRACTED)
-      real                       :: tsync_local(MAX_SUBTRACTED)
+      real(real64)               :: tsync_local(MAX_SUBTRACTED)
       integer                    :: payload_local(PAYLOAD_BITS,MAX_SUBTRACTED)
 
       nframe=59*nsps
       step=nframe/4
-      call prune_receive_state((istart-1)/12000.0,nframe/12000.0)
+      call prune_receive_state(sample_time(istart),nframe/12000.0)
 
       interferer_pending=.false.   ! defensive: no stale interferer input
       call jtty_mdecode(istart,istart0,iwave(istart),nchunk,nsps,ndebug,nfa,nfb, &
@@ -1227,6 +1394,9 @@ contains
          do k=1,MAX_RETRO_STEPS
             istart_prev=istart-k*step
             if(istart_prev.lt.1) cycle
+            if(explicit_receive_context) then
+               if(sample_origin+int(istart_prev-1,int64).lt.first_search_sample) cycle
+            endif
             interferer_pending=.true.
             interferer_f1=f1_local(i)
             interferer_tsync=tsync_local(i)

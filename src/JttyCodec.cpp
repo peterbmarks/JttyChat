@@ -4,13 +4,12 @@
 #include <cmath>
 #include <cstring>
 
-namespace {
-using fortran_charlen_t = long;
-}
-
 extern "C" {
-void genjtty_profile_(char *msg, const int *exchange_profile, int itone[], int *nsym,
-                       fortran_charlen_t);
+// lib/jtty/genjtty.f90 (bind(C)). Rewrites msg, an 80-character field, as the
+// text its frames carry. is_final=0 leaves the end-of-message flag clear.
+// status is JTTY_ENCODE_OK (0) on success.
+void genjtty_text_c(char msg[], int exchange_profile, int is_final, int itone[], int *nsym,
+                   char frames[], int *nframes, int frame_starts[], int *status);
 void gen_jttywave_(int itone[], int *nsym, int *nsps, float *bt, float *fsample, float *f0,
                     float xjunk[], float wave[], int *icmplx, int *nwave);
 }
@@ -28,15 +27,22 @@ bool isSupportedCharacter(QChar c)
     return alphabet.contains(c) || (c >= QLatin1Char('a') && c <= QLatin1Char('z'));
 }
 
-// Builds the fixed-width, space-padded 80-character frame genjtty_profile_
-// expects, sanitizing anything the codec can't represent to '#'.
+// Builds the fixed-width, space-padded 80-character frame genjtty_text_c
+// expects. As upstream's prepareTransmitText: '~' (the receiver's missed-frame
+// sentinel) and NUL become spaces, line breaks become spaces (we send a single
+// segment), and anything else the codec can't represent becomes '#'.
 QByteArray prepareFrame(const QString &message)
 {
     const QString bounded = message.left(maxMessageLength);
     QString sanitized;
     sanitized.reserve(bounded.size());
-    for (QChar c : bounded)
-        sanitized.append(isSupportedCharacter(c) ? c : QLatin1Char('#'));
+    for (QChar c : bounded) {
+        if (c == QChar(0) || c == QLatin1Char('~') || c == QLatin1Char('\n')
+            || c == QLatin1Char('\r'))
+            sanitized.append(QLatin1Char(' '));
+        else
+            sanitized.append(isSupportedCharacter(c) ? c : QLatin1Char('#'));
+    }
 
     QByteArray frame = sanitized.toLatin1();
     frame.resize(maxMessageLength, ' ');
@@ -50,14 +56,23 @@ EncodedMessage encodeMessage(const QString &message, float toneFrequencyHz)
     EncodedMessage result;
 
     QByteArray frame = prepareFrame(message);
-    int itone[symbolsPerFrame * maxFrames];
-    int nsym = 0;
-    int const exchangeProfile = 0; // NativeExchangeProfile::None - no contest exchange UI here
-    genjtty_profile_(frame.data(), &exchangeProfile, itone, &nsym, maxMessageLength);
-    if (nsym <= 0)
+    if (frame.trimmed().isEmpty())
         return result;
 
-    // genjtty_profile_ normalizes the message in place (padding/casing);
+    int itone[symbolsPerFrame * maxFrames];
+    char packedFrames[frameBits * maxFrames];
+    int frameStarts[maxFrames] = {};
+    int nsym = 0;
+    int nframes = 0;
+    int status = -1;
+    int const exchangeProfile = 0; // NativeExchangeProfile::None - no contest exchange UI here
+    int const isFinal = 1;         // single segment: always carries the end-of-message flag
+    genjtty_text_c(frame.data(), exchangeProfile, isFinal, itone, &nsym, packedFrames, &nframes,
+                   frameStarts, &status);
+    if (status != 0 || nsym <= 0)
+        return result;
+
+    // genjtty_text_c normalizes the message in place (padding/casing);
     // read it back so what we display/log matches what was actually sent.
     result.canonicalText = QString::fromLatin1(frame).trimmed();
 
